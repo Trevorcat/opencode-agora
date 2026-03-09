@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LiveStatusPoller } from '../../src/tui/poller.js';
+import { LiveStatusPoller } from '../../src/utils/poller.js';
 import type { BlackboardStore } from '../../src/blackboard/store.js';
 import type { LiveStatus } from '../../src/blackboard/types.js';
 

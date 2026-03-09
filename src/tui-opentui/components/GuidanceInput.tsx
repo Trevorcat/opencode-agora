@@ -18,9 +18,12 @@ export const GuidanceInput: React.FC<GuidanceInputProps> = ({
       style={{ 
         borderStyle: 'single', 
         borderColor: '#e0af68',
-        padding: 1,
+        width: '100%',
+        height: 3,
         flexDirection: 'row',
-        height: '100%'
+        alignItems: 'center',
+        paddingLeft: 1,
+        paddingRight: 1,
       }}
     >
       <text style={{ bold: true, color: '#e0af68' }}>⚡ INJECT GUIDANCE ➔ </text>

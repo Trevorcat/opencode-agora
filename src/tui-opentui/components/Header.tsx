@@ -40,19 +40,19 @@ export const Header: React.FC<HeaderProps> = ({
       style={{ 
         borderStyle: 'rounded', 
         borderColor: '#7aa2f7',
-        padding: 1,
-        flexDirection: 'column',
-        height: '100%'
+        width: '100%',
+        height: 3,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingLeft: 1,
+        paddingRight: 1,
       }}
     >
-      <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <text style={{ bold: true, color: '#bb9af7' }}>AGORÁ // {topicId.toUpperCase()}</text>
-        <text>Round {round}/{totalRounds}</text>
-        <text style={{ bold: true, color: getStatusColor() }}>{getStatusText()}</text>
-      </box>
-      <box style={{ marginTop: 1 }}>
-        <text style={{ italic: true }}>{truncatedQuestion}</text>
-      </box>
+      <text style={{ bold: true, color: '#bb9af7' }}>AGORÁ // {topicId.toUpperCase()}</text>
+      <text style={{ italic: true, color: '#a9b1d6' }}>{truncatedQuestion}</text>
+      <text>Round {round}/{totalRounds}</text>
+      <text style={{ bold: true, color: getStatusColor() }}>{getStatusText()}</text>
     </box>
   );
 };

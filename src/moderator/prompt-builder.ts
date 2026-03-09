@@ -1,4 +1,6 @@
 import type { AgentConfig, BlackboardItem, Guidance, Post } from "../blackboard/types.js";
+import type { DetectedLanguage } from "../utils/language-detect.js";
+import { getLanguageInstruction } from "../utils/language-detect.js";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -43,13 +45,16 @@ export function buildRound1Prompt(params: {
   context?: string;
   guidance?: Guidance[];
   blackboard?: BlackboardItem[];
+  language?: DetectedLanguage;
 }): ChatMessage[] {
-  const { agent, question, context, guidance, blackboard } = params;
+  const { agent, question, context, guidance, blackboard, language } = params;
 
-  const system = [
+  const langInstruction = language ? getLanguageInstruction(language) : "";
+
+  const systemParts = [
     `You are participating as: ${agent.role}.`,
     `Persona: ${agent.persona}.`,
-    "Return ONLY valid JSON.",
+    "Return ONLY valid JSON. Do not include any text outside the JSON object.",
     "Use this schema:",
     round1JsonSchema,
     "Field requirements:",
@@ -57,7 +62,14 @@ export function buildRound1Prompt(params: {
     "- reasoning: string[]",
     "- confidence: number between 0-1",
     "- open_questions: optional string[]",
-  ].join("\n");
+  ];
+
+  if (langInstruction) {
+    systemParts.push(langInstruction);
+    systemParts.push("Keep all JSON keys in English. Only values should be in the target language.");
+  }
+
+  const system = systemParts.join("\n");
 
   const sections: string[] = [
     `Question: ${question}`,
@@ -100,18 +112,45 @@ export function buildRoundNPrompt(params: {
   context?: string;
   guidance?: Guidance[];
   blackboard?: BlackboardItem[];
+  language?: DetectedLanguage;
 }): ChatMessage[] {
-  const { agent, question, round, prevPosts, context, guidance, blackboard } = params;
+  const { agent, question, round, prevPosts, context, guidance, blackboard, language } = params;
   const previousRound = prevPosts.length
     ? prevPosts.map((post, index) => `Post ${index + 1}\n${formatPost(post)}`).join("\n\n")
     : "No previous posts provided.";
 
-  const system = [
+  const roundNJsonSchema = `{
+  "position": "string",
+  "reasoning": ["string"],
+  "confidence": 0.0,
+  "open_questions": ["string"],
+  "responses_to_peers": [{"to_role": "string", "stance": "agree|partially_agree|disagree", "comment": "string"}]
+}`;
+
+  const langInstruction = language ? getLanguageInstruction(language) : "";
+
+  const systemParts = [
     `You are participating as: ${agent.role}.`,
     `Persona: ${agent.persona}.`,
     `Round ${round}.`,
     "Respond to peer positions directly and refine your own stance.",
-  ].join("\n");
+    "Return ONLY valid JSON. Do not include any text outside the JSON object.",
+    "Use this schema:",
+    roundNJsonSchema,
+    "Field requirements:",
+    "- position: string (your updated stance)",
+    "- reasoning: string[] (your arguments)",
+    "- confidence: number between 0-1",
+    "- open_questions: optional string[]",
+    "- responses_to_peers: optional array of responses to other agents",
+  ];
+
+  if (langInstruction) {
+    systemParts.push(langInstruction);
+    systemParts.push("Keep all JSON keys in English. Only values should be in the target language.");
+  }
+
+  const system = systemParts.join("\n");
 
   const sections: string[] = [
     `Question: ${question}`,
@@ -154,8 +193,9 @@ export function buildVotePrompt(params: {
   question: string;
   allPosts: Post[][];
   blackboard?: BlackboardItem[];
+  language?: DetectedLanguage;
 }): ChatMessage[] {
-  const { agent, question, allPosts, blackboard } = params;
+  const { agent, question, allPosts, blackboard, language } = params;
 
   const history = allPosts.length
     ? allPosts
@@ -169,12 +209,21 @@ export function buildVotePrompt(params: {
         .join("\n\n")
     : "No debate history provided.";
 
-  const system = [
+  const langInstruction = language ? getLanguageInstruction(language) : "";
+
+  const systemParts = [
     `You are participating as: ${agent.role}.`,
     `Persona: ${agent.persona}.`,
     "Review all debate rounds and cast a final vote.",
     "Prioritize strongest evidence and note unresolved disagreements.",
-  ].join("\n");
+  ];
+
+  if (langInstruction) {
+    systemParts.push(langInstruction);
+    systemParts.push("Keep all JSON keys in English. Only values should be in the target language.");
+  }
+
+  const system = systemParts.join("\n");
 
   const sections: string[] = [
     `Question: ${question}`,

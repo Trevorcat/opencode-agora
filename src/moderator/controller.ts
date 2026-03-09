@@ -12,6 +12,7 @@ import type {
 import { withRetry, type RetryOptions } from "../resilience/retry.js";
 import { withTimeout } from "../resilience/timeout.js";
 import { barrierAllSettled } from "../sync/barrier.js";
+import { detectLanguage } from "../utils/language-detect.js";
 import {
   buildRound1Prompt,
   buildRoundNPrompt,
@@ -66,11 +67,14 @@ export class DebateController {
   async runDebate(params: RunDebateParams): Promise<void> {
     const { topicId, question, context, agents, enablePause = false, enableGuidance = false } = params;
 
+    const lang = detectLanguage(question);
+
     await this.store.saveTopic({
       id: topicId,
       question,
       context,
       status: "pending",
+      language: lang,
       config: {
         max_rounds: 3,
         consensus_threshold: 0.66,
@@ -132,7 +136,7 @@ export class DebateController {
 
           const prompt =
             round === 1
-              ? buildRound1Prompt({ agent, question, context, guidance })
+              ? buildRound1Prompt({ agent, question, context, guidance, language: lang })
               : buildRoundNPrompt({
                   agent,
                   question,
@@ -140,11 +144,28 @@ export class DebateController {
                   prevPosts,
                   context,
                   guidance,
+                  language: lang,
                 });
 
           const label = `${agent.role}-round-${round}`;
+          
+          // Stream callback for real-time updates
+          const onChunk = async (chunk: string, isComplete: boolean) => {
+            await this.notifyProgress({
+              type: "agent_stream",
+              topic_id: topicId,
+              round,
+              agent: agent.role,
+              chunk,
+              timestamp: new Date().toISOString(),
+            });
+          };
+
           const post = await withRetry(
-            () => withTimeout(() => this.processManager.callAgent(agent, prompt, round), { timeoutMs: this.timeoutMs, label }),
+            () => withTimeout(
+              () => this.processManager.callAgent(agent, prompt, round, onChunk), 
+              { timeoutMs: this.timeoutMs, label }
+            ),
             {
               ...this.retryOpts,
               skip: true,
@@ -205,6 +226,30 @@ export class DebateController {
           posts: successfulPosts,
           timestamp: new Date().toISOString(),
         });
+
+        // Auto-pin round checkpoint to blackboard
+        const summaryLines = successfulPosts.map(p => {
+          const snippet = p.position.length > 60 ? p.position.substring(0, 60) + '…' : p.position;
+          return `- ${p.role} (conf ${p.confidence.toFixed(2)}): ${snippet}`;
+        });
+        const checkpointContent = `Round ${round} Summary:\n${summaryLines.join('\n')}`;
+        const checkpointItem: BlackboardItem = {
+          id: `bb_checkpoint_r${round}_${Date.now()}`,
+          type: 'checkpoint',
+          content: checkpointContent,
+          author: 'moderator',
+          timestamp: new Date().toISOString(),
+          round,
+          pinned: true,
+          editable: false,
+        };
+        await this.store.saveBlackboardItem(topicId, checkpointItem);
+        await this.notifyProgress({
+          type: 'blackboard_updated',
+          topic_id: topicId,
+          item: checkpointItem,
+          timestamp: new Date().toISOString(),
+        });
       }
 
       await this.notifyProgress({
@@ -219,6 +264,7 @@ export class DebateController {
           agent,
           question,
           allPosts,
+          language: lang,
         });
 
         const vote = await this.callWithResilience(`${agent.role}-vote`, () =>
@@ -444,6 +490,13 @@ export class DebateController {
   }
 
   private async notifyProgress(event: ProgressEvent): Promise<void> {
+    // Always persist events to the event log for cross-process TUI consumption
+    try {
+      await this.store.appendEvent(event.topic_id, event);
+    } catch (error) {
+      console.error("[Agora] Event log write failed:", error);
+    }
+
     if (this.onProgress) {
       try {
         await this.onProgress(event);

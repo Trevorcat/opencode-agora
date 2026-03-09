@@ -27,8 +27,35 @@ export class AgentProcessManager {
     agent: AgentConfig,
     messages: ChatMessage[],
     round: number,
+    onChunk?: (chunk: string, isComplete: boolean) => void,
   ): Promise<Post> {
     const { client, modelName } = this.getClientForModel(agent.model);
+    
+    // Support streaming if callback provided
+    if (onChunk) {
+      const stream = await client.chat.completions.create({
+        model: modelName,
+        messages,
+        response_format: { type: "json_object" },
+        stream: true,
+      });
+
+      let fullContent = '';
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        fullContent += content;
+        onChunk(fullContent, false);
+      }
+      
+      onChunk(fullContent, true);
+      
+      const parsed = this.parseJSON(fullContent);
+      const payload = this.toRecord(parsed, "Agent response must be a JSON object");
+      
+      return this.buildPost(agent, round, payload);
+    }
+
+    // Non-streaming fallback
     const response = await client.chat.completions.create({
       model: modelName,
       messages,
@@ -39,6 +66,10 @@ export class AgentProcessManager {
     const parsed = this.parseJSON(content);
     const payload = this.toRecord(parsed, "Agent response must be a JSON object");
 
+    return this.buildPost(agent, round, payload);
+  }
+
+  private buildPost(agent: AgentConfig, round: number, payload: JsonRecord): Post {
     const position = this.readString(payload, "position");
     const reasoning = this.readStringArray(payload, "reasoning");
 
@@ -103,13 +134,41 @@ export class AgentProcessManager {
       throw new Error("Model returned empty response content");
     }
 
-    const stripped = content
+    // Strip DeepSeek-style <think>...</think> reasoning blocks
+    let cleaned = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+    // Strip markdown code fences
+    cleaned = cleaned
       .replace(/^```(?:json)?\s*/i, "")
       .replace(/\s*```$/, "")
       .trim();
 
+    // If there's still non-JSON preamble, try to extract the JSON object
+    if (!cleaned.startsWith("{") && !cleaned.startsWith("[")) {
+      const jsonStart = cleaned.indexOf("{");
+      if (jsonStart !== -1) {
+        cleaned = cleaned.slice(jsonStart);
+      }
+    }
+
+    // Try to find the matching closing brace if there's trailing text
+    if (cleaned.startsWith("{")) {
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      for (let i = 0; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (escaped) { escaped = false; continue; }
+        if (ch === "\\") { escaped = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === "{") depth++;
+        if (ch === "}") { depth--; if (depth === 0) { cleaned = cleaned.slice(0, i + 1); break; } }
+      }
+    }
+
     try {
-      return JSON.parse(stripped);
+      return JSON.parse(cleaned);
     } catch {
       throw new Error("Model returned invalid JSON");
     }

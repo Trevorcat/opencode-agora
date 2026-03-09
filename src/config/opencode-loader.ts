@@ -38,6 +38,15 @@ function resolveApiKey(raw: string): string {
 }
 
 /**
+ * Represents an available model from a provider.
+ */
+export interface AvailableModel {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+/**
  * Parse the model string "provider/model" into its components.
  */
 export function parseModelId(fullModelId: string): { provider: string; model: string } {
@@ -83,6 +92,26 @@ export function resolveProviders(config: OpenCodeConfig): Map<string, ResolvedPr
   }
 
   return providers;
+}
+
+/**
+ * List all available models from the OpenCode config.
+ * Iterates over all providers and their models, building an array of AvailableModel entries.
+ */
+export function listAvailableModels(config: OpenCodeConfig): AvailableModel[] {
+  const models: AvailableModel[] = [];
+
+  for (const [providerKey, entry] of Object.entries(config.provider)) {
+    for (const [modelKey, modelInfo] of Object.entries(entry.models)) {
+      models.push({
+        id: `${providerKey}/${modelKey}`,
+        name: modelInfo.name,
+        provider: providerKey,
+      });
+    }
+  }
+
+  return models;
 }
 
 /**

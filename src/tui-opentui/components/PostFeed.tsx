@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import type { Post } from '../../blackboard/types.js';
 
+export type ThinkingAgent = {
+  role: string;
+  streaming_text?: string;
+};
+
 export type PostFeedProps = {
   posts: Post[];
   selectedIndex: number;
   expandedPostId: string | null;
   onPostClick?: (postId: string) => void;
+  /** Agents currently thinking/streaming in the current round */
+  thinkingAgents?: ThinkingAgent[];
 };
 
 const getAgentColor = (role: string): string => {
@@ -20,46 +27,61 @@ const getAgentColor = (role: string): string => {
   return colors[role.toLowerCase()] || colors.default;
 };
 
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
 export const PostFeed: React.FC<PostFeedProps> = ({ 
   posts, 
   selectedIndex,
   expandedPostId,
-  onPostClick 
+  onPostClick,
+  thinkingAgents = [],
 }) => {
   const [spinnerFrame, setSpinnerFrame] = useState(0);
   
-  // Braille spinner animation
+  // Braille spinner animation — only active when agents are thinking
+  const hasThinking = thinkingAgents.length > 0;
   useEffect(() => {
+    if (!hasThinking) return;
     const interval = setInterval(() => {
       setSpinnerFrame(f => (f + 1) % 10);
     }, 80);
     return () => clearInterval(interval);
-  }, []);
-
-  const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  }, [hasThinking]);
 
   const visiblePosts = posts.slice(-15);
+
+  // Build interleaved list with round-boundary separators
+  type RenderItem =
+    | { kind: 'separator'; fromRound: number; toRound: number }
+    | { kind: 'post'; post: Post; globalIdx: number };
+
+  const renderItems: RenderItem[] = [];
+  const offset = Math.max(0, posts.length - 15);
+  visiblePosts.forEach((post, idx) => {
+    const prevPost = visiblePosts[idx - 1];
+    if (prevPost && prevPost.round !== post.round) {
+      renderItems.push({ kind: 'separator', fromRound: prevPost.round, toRound: post.round });
+    }
+    renderItems.push({ kind: 'post', post, globalIdx: offset + idx });
+  });
 
   return (
     <box 
       style={{ 
         borderStyle: 'rounded', 
         borderColor: '#ffffff',
-        padding: 1,
+        width: '100%',
+        height: '100%',
         flexDirection: 'column',
-        height: '100%'
       }}
     >
-      <text style={{ bold: true, color: '#ffffff' }}>THE FORUM</text>
-      <text style={{ color: '#565f89' }}> (Scroll/Click to navigate, Enter/Click to expand)</text>
+      <text style={{ bold: true, color: '#ffffff' }}> THE FORUM (Scroll/Click to expand)</text>
 
-      {posts.length === 0 ? (
+      {posts.length === 0 && thinkingAgents.length === 0 ? (
         <box 
           style={{ 
-            borderStyle: 'rounded', 
-            borderColor: '#565f89',
-            padding: 2,
-            marginTop: 1
+            paddingLeft: 1,
+            paddingTop: 1,
           }}
         >
           <text style={{ italic: true, color: '#565f89' }}>Waiting for transmissions...</text>
@@ -73,14 +95,30 @@ export const PostFeed: React.FC<PostFeedProps> = ({
             stickyScroll: false,
           }}
         >
-          {visiblePosts.map((post, idx) => {
-            const isLatest = idx === visiblePosts.length - 1;
-            const isSelected = posts.length - 15 + idx === selectedIndex;
-            const postId = `${post.role}-${posts.length - 15 + idx}`;
+          {/* Completed posts and separators */}
+          {renderItems.map((item, idx) => {
+            if (item.kind === 'separator') {
+              return (
+                <box
+                  key={`sep-${item.fromRound}-${item.toRound}`}
+                  style={{ marginBottom: 1, flexDirection: 'column' }}
+                >
+                  <text style={{ color: '#565f89' }}>{'═'.repeat(36)}</text>
+                  <text style={{ bold: true, color: '#7aa2f7' }}>{'  ✦ ROUND '}{item.fromRound}{' COMPLETE → ROUND '}{item.toRound}{'  '}</text>
+                  <text style={{ color: '#565f89', italic: true }}>{'  Agents preparing next arguments...  '}</text>
+                  <text style={{ color: '#565f89' }}>{'═'.repeat(36)}</text>
+                </box>
+              );
+            }
+
+            const { post, globalIdx } = item;
+            const isLatest = globalIdx === posts.length - 1 && thinkingAgents.length === 0;
+            const isSelected = globalIdx === selectedIndex;
+            const postId = `${post.role}-${globalIdx}`;
             const isExpanded = expandedPostId === postId;
             const roleColor = getAgentColor(post.role);
             
-            const borderStyle = isExpanded ? 'double' : (isLatest ? 'double' : 'single');
+            const borderStyle = isExpanded || isLatest ? 'double' : 'single';
             const borderColor = isSelected ? '#ffffff' : roleColor;
             const content = isExpanded 
               ? `${post.position}. ${(post.reasoning || []).join(' ')}`
@@ -101,14 +139,53 @@ export const PostFeed: React.FC<PostFeedProps> = ({
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <text style={{ bold: true, color: roleColor }}>
-                    [{post.role.toUpperCase()}]{isSelected ? ' ★' : ''}{isExpanded ? ' [EXPANDED]' : ''}
+                    {'['}{post.role.toUpperCase()}{']'}{isSelected ? ' ★' : ''}{isExpanded ? ' [EXPANDED]' : ''}
                   </text>
-                  <text style={{ color: '#565f89' }}>Round {post.round}</text>
+                  <text style={{ color: '#565f89' }}>{'Round '}{post.round}</text>
                 </box>
                 
                 <box style={{ paddingLeft: 1, marginTop: 1 }}>
                   <text style={{ color: '#c0caf5' }}>{content}</text>
                 </box>
+              </box>
+            );
+          })}
+
+          {/* Currently thinking/streaming agents */}
+          {thinkingAgents.map((agent) => {
+            const roleColor = getAgentColor(agent.role);
+            const spinner = SPINNER_FRAMES[spinnerFrame];
+            const streamPreview = agent.streaming_text
+              ? agent.streaming_text.substring(agent.streaming_text.length - 80).replace(/\n/g, ' ')
+              : '';
+
+            return (
+              <box
+                key={`thinking-${agent.role}`}
+                style={{
+                  borderStyle: 'double',
+                  borderColor: '#e0af68',
+                  padding: 1,
+                  marginBottom: 1,
+                  flexDirection: 'column',
+                }}
+              >
+                <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <text style={{ bold: true, color: roleColor }}>
+                    {spinner} [{agent.role.toUpperCase()}] THINKING...
+                  </text>
+                  <text style={{ color: '#e0af68' }}>{spinner}</text>
+                </box>
+
+                {streamPreview ? (
+                  <box style={{ paddingLeft: 1, marginTop: 1 }}>
+                    <text style={{ color: '#565f89', italic: true }}>{streamPreview}</text>
+                  </box>
+                ) : (
+                  <box style={{ paddingLeft: 1, marginTop: 1 }}>
+                    <text style={{ color: '#565f89', italic: true }}>{spinner} Generating response...</text>
+                  </box>
+                )}
               </box>
             );
           })}

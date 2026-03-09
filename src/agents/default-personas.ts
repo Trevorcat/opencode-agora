@@ -2,6 +2,8 @@
 // Default 4-agent debate panel.
 // Model IDs reference models defined in OpenCode's opencode.json provider config.
 
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import type { AgentConfig } from "../blackboard/types.js";
 
 export const DEFAULT_AGENTS: AgentConfig[] = [
@@ -61,4 +63,23 @@ Think about what will actually work in production, not just what sounds good in 
 
 export function getDefaultAgents(): AgentConfig[] {
   return DEFAULT_AGENTS.map((a) => ({ ...a }));
+}
+
+export async function loadAgentConfig(agoraDir: string): Promise<AgentConfig[]> {
+  const configPath = path.join(agoraDir, "agents.json");
+  try {
+    const raw = await fs.readFile(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return getDefaultAgents();
+    const valid = parsed.every((a: any) =>
+      typeof a.role === "string" &&
+      typeof a.persona === "string" &&
+      typeof a.model === "string" &&
+      a.model.includes("/")
+    );
+    if (!valid) return getDefaultAgents();
+    return parsed as AgentConfig[];
+  } catch {
+    return getDefaultAgents();
+  }
 }

@@ -17,7 +17,8 @@ import { PostFeed } from './components/PostFeed.js';
 import { BlackboardPanel } from './components/BlackboardPanel.js';
 import { StatusBar } from './components/StatusBar.js';
 import { GuidanceInput } from './components/GuidanceInput.js';
-import { PresetPicker } from './components/PresetPicker.js';
+import { TopicManager } from './components/TopicManager.js';
+import { resolvePreset } from '../config/presets.js';
 
 export type AppMode = 
   | { kind: 'picker' }
@@ -39,6 +40,7 @@ export const App: React.FC<AppProps> = ({
   controller, 
   availableModels,
   presets,
+  agoraDir,
 }) => {
   const [mode, setMode] = useState<AppMode>(
     initialTopicId ? { kind: 'debate', topicId: initialTopicId } : { kind: 'picker' }
@@ -89,7 +91,7 @@ export const App: React.FC<AppProps> = ({
   }, [liveStatus?.status]);
 
   // Keyboard handling
-  useKeyboard((key: { name: string; ctrl?: boolean }) => {
+  useKeyboard((key: { name: string; ctrl?: boolean; shift?: boolean }) => {
     if (mode.kind !== 'debate') return;
 
     if (inputMode === 'guidance') {
@@ -123,6 +125,20 @@ export const App: React.FC<AppProps> = ({
         const maxPosts = liveStatus?.recent_posts.length || 0;
         setSelectedPostIndex(prev => Math.min(maxPosts - 1, prev + 1));
       }
+    } else if (key.name === 'tab') {
+      const roles = liveStatus?.agents.map(a => a.role) || [];
+      if (roles.length > 0) {
+        if (!expandedAgentRole) {
+          setExpandedAgentRole(key.shift ? roles[roles.length - 1] : roles[0]);
+        } else {
+          const idx = roles.indexOf(expandedAgentRole);
+          if (key.shift) {
+            setExpandedAgentRole(idx > 0 ? roles[idx - 1] : null);
+          } else {
+            setExpandedAgentRole(idx < roles.length - 1 ? roles[idx + 1] : null);
+          }
+        }
+      }
     } else if (key.name === 'return' || key.name === 'space') {
       // Expand/collapse selected post (only when agent panel select is not focused)
       if (!expandedAgentRole && liveStatus?.recent_posts[selectedPostIndex]) {
@@ -134,6 +150,8 @@ export const App: React.FC<AppProps> = ({
       const isFinished = liveStatus?.status === 'completed' || liveStatus?.status === 'failed';
       if (isFinished && !overlayDismissed) {
         setOverlayDismissed(true);
+      } else if (expandedAgentRole) {
+        setExpandedAgentRole(null);
       }
     }
   });
@@ -155,14 +173,28 @@ export const App: React.FC<AppProps> = ({
   // Show picker mode
   if (mode.kind === 'picker') {
     return (
-      <PresetPicker
+      <TopicManager
         presets={presets}
+        store={store}
         onStart={(newTopic, presetId) => {
-          // In a real implementation, we'd start the debate here
-          // For now, just log and wait for the user to provide a topicId
-          console.log(`Selected preset: ${presetId} for topic: ${newTopic}`);
-          console.log('Please start the debate via MCP server and then provide the topicId');
-          process.exit(0);
+          const startDebate = async () => {
+            try {
+              const agents = await resolvePreset(agoraDir, presetId);
+              const newTopicId = `topic-${Date.now()}`;
+              controller.runDebateAsync({
+                topicId: newTopicId,
+                question: newTopic,
+                agents,
+              });
+              setMode({ kind: 'debate', topicId: newTopicId });
+            } catch (err) {
+              console.error('Failed to start debate:', err);
+            }
+          };
+          startDebate();
+        }}
+        onResume={(resumeTopicId) => {
+          setMode({ kind: 'debate', topicId: resumeTopicId });
         }}
         onCancel={() => process.exit(0)}
       />

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile, appendFile, stat, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -8,6 +8,7 @@ import type {
   Guidance,
   LiveStatus,
   Post,
+  ProgressEvent,
   Topic,
   TopicWithBlackboard,
   Vote,
@@ -139,6 +140,17 @@ export class BlackboardStore {
     }
   }
 
+  async deleteTopic(topicId: string): Promise<void> {
+    const topicDir = this.topicDir(topicId);
+    try {
+      await rm(topicDir, { recursive: true, force: true });
+    } catch (error) {
+      if (!this.isMissingFileError(error)) {
+        throw error;
+      }
+    }
+  }
+
   private topicsDir(): string {
     return path.join(this.rootDir, "topics");
   }
@@ -207,6 +219,18 @@ export class BlackboardStore {
     await this.saveBlackboardItem(topicId, { ...item, ...updates });
   }
 
+  async updateAgentModel(topicId: string, role: string, newModel: string): Promise<void> {
+    if (!newModel.includes('/')) {
+      throw new Error('Model ID must be in "provider/model" format');
+    }
+    const topic = await this.getTopic(topicId);
+    if (!topic) throw new Error('Topic not found: ' + topicId);
+    const agentIndex = topic.config.agents.findIndex(a => a.role === role);
+    if (agentIndex === -1) throw new Error('Agent role not found: ' + role);
+    topic.config.agents[agentIndex].model = newModel;
+    await this.saveTopic(topic);
+  }
+
   // ─── Guidance Queue Operations ────────────────────────────────────────────
 
   async addGuidance(topicId: string, guidance: Guidance): Promise<void> {
@@ -260,20 +284,72 @@ export class BlackboardStore {
     }
     const pendingGuidance = await this.getPendingGuidance(topicId);
 
+    // Read recent events to enrich agent statuses with thinking/streaming info
+    const recentEvents = await this.getRecentEvents(topicId, 30);
+
+    // Build a map of latest event per agent for the current round
+    const agentEventState = new Map<string, { status: "thinking" | "error"; streamText?: string }>();
+    let latestEventMessage: string | undefined;
+
+    for (const event of recentEvents) {
+      if (event.type === "agent_thinking") {
+        agentEventState.set(event.agent, { status: "thinking" });
+        latestEventMessage = `${event.agent} is thinking...`;
+      } else if (event.type === "agent_stream") {
+        const existing = agentEventState.get(event.agent);
+        if (existing) {
+          existing.streamText = event.chunk;
+        } else {
+          agentEventState.set(event.agent, { status: "thinking", streamText: event.chunk });
+        }
+      } else if (event.type === "agent_posted") {
+        // Agent finished — clear thinking state
+        agentEventState.delete(event.post.role);
+        latestEventMessage = `${event.post.role} posted (Round ${event.round})`;
+      } else if (event.type === "agent_error") {
+        agentEventState.set(event.agent, { status: "error" });
+        latestEventMessage = `${event.agent} error: ${event.error}`;
+      } else if (event.type === "round_started") {
+        // New round — reset all agent states
+        agentEventState.clear();
+        latestEventMessage = `Round ${event.round} started`;
+      } else if (event.type === "round_complete") {
+        agentEventState.clear();
+        latestEventMessage = `Round ${event.round} complete`;
+      } else if (event.type === "voting_started") {
+        agentEventState.clear();
+        latestEventMessage = "Voting phase started";
+      } else if (event.type === "debate_complete") {
+        agentEventState.clear();
+        latestEventMessage = "Debate complete!";
+      } else if (event.type === "debate_started") {
+        latestEventMessage = "Debate started";
+      }
+    }
+
     return {
       topic_id: topicId,
       status: topic.status === "running" && await this.isPaused(topicId) ? "paused" : topic.status,
       current_round: currentRound,
       total_rounds: topic.config.max_rounds,
-      agents: topic.config.agents.map(agent => ({
-        role: agent.role,
-        model: agent.model,
-        status: this.determineAgentStatus(agent.role, posts),
-        last_post: [...allPosts].reverse().find((p: Post) => p.role === agent.role),
-      })),
+      agents: topic.config.agents.map(agent => {
+        const eventState = agentEventState.get(agent.role);
+        const fileStatus = this.determineAgentStatus(agent.role, posts);
+        // Event state overrides file state for real-time "thinking" and "error"
+        const status = (fileStatus === "posted") ? "posted" : (eventState?.status ?? fileStatus);
+        return {
+          role: agent.role,
+          model: agent.model,
+          status,
+          last_post: [...allPosts].reverse().find((p: Post) => p.role === agent.role),
+          streaming_text: eventState?.streamText,
+          persona: agent.persona,
+        };
+      }),
       blackboard: await this.getBlackboard(topicId),
       pending_guidance: pendingGuidance.length,
-      recent_posts: allPosts.slice(-10), // Last 10 posts
+      recent_posts: allPosts.slice(-10),
+      latest_event: latestEventMessage,
     };
   }
 
@@ -323,6 +399,40 @@ export class BlackboardStore {
   async getAttachedSessions(topicId: string): Promise<string[]> {
     const sessionsPath = path.join(this.topicDir(topicId), "attached-sessions.json");
     return await this.readJson<string[]>(sessionsPath) ?? [];
+  }
+
+  // ─── Event Log (append-only JSONL for cross-process TUI communication) ──
+
+  async appendEvent(topicId: string, event: ProgressEvent): Promise<void> {
+    const topicDir = this.topicDir(topicId);
+    await mkdir(topicDir, { recursive: true });
+    const line = JSON.stringify(event) + "\n";
+    await appendFile(path.join(topicDir, "events.jsonl"), line, "utf8");
+  }
+
+  /**
+   * Read the most recent N events from the event log.
+   * Reads the tail of the file efficiently for large logs.
+   */
+  async getRecentEvents(topicId: string, count = 50): Promise<ProgressEvent[]> {
+    const eventsPath = path.join(this.topicDir(topicId), "events.jsonl");
+    try {
+      const content = await readFile(eventsPath, "utf8");
+      const lines = content.trim().split("\n").filter(Boolean);
+      const tail = lines.slice(-count);
+      const events: ProgressEvent[] = [];
+      for (const line of tail) {
+        try {
+          events.push(JSON.parse(line));
+        } catch {
+          // Skip malformed lines
+        }
+      }
+      return events;
+    } catch (error) {
+      if (this.isMissingFileError(error)) return [];
+      throw error;
+    }
   }
 
   // ─── Helper Methods ───────────────────────────────────────────────────────

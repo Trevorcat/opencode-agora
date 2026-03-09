@@ -345,14 +345,11 @@ describe("DebateController – progress events", () => {
   // ─── Test 9 (Failure): "agent_error" emitted when agent throws ───────────────
 
   it('emits "agent_error" when an agent throws, with error message', async () => {
-    // Only one agent fails (the first call), then succeeds → debate still completes
-    // Actually, if all agents fail in a round, the debate fails. Let's have the
-    // second agent succeed so round_complete is emitted for round 1.
-    let callCount = 0;
+    // Only one agent fails, the other succeeds → debate still completes
+    // economist fails in round 1; ethicist succeeds in all rounds
     mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
-      callCount++;
-      // First call (economist, round 1) throws; second call (ethicist, round 1) succeeds
-      if (callCount === 1 && round === 1 && agent.role === "economist") {
+      // economist always fails in round 1
+      if (round === 1 && agent.role === "economist") {
         throw new Error("economist-network-error");
       }
       return {

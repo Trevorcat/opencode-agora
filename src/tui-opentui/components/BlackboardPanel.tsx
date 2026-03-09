@@ -43,19 +43,18 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
       style={{ 
         borderStyle: 'rounded', 
         borderColor: '#e0af68',
-        padding: 1,
+        width: '100%',
+        height: '100%',
         flexDirection: 'column',
-        height: '100%'
       }}
     >
-      <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <text style={{ bold: true, color: '#ffffff' }}>BLACKBOARD</text>
-        <text style={{ color: '#565f89' }}>[{items.length} items]</text>
+      <box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 1, paddingRight: 1 }}>
+        <text style={{ bold: true, color: '#ffffff' }}>BLACKBOARD [{items.length}]</text>
+        <text style={{ color: '#565f89' }}>(Click to expand)</text>
       </box>
-      <text style={{ color: '#565f89' }}> (Click items to expand)</text>
 
       {visibleItems.length === 0 ? (
-        <box style={{ padding: 2 }}>
+        <box style={{ paddingLeft: 1, paddingTop: 1, flexDirection: 'column' }}>
           <text style={{ italic: true, color: '#565f89' }}>No artifacts pinned yet...</text>
           <text style={{ color: '#565f89' }}>Use forum.pin_to_blackboard</text>
         </box>

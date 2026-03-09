@@ -27,6 +27,8 @@ export interface Topic {
   constraints?: string[];
   status: DebateStatus;
   config: DebateConfig;
+  /** Detected language of the question (e.g. "zh", "ja", "en") */
+  language?: string;
   created_at: string; // ISO 8601
   completed_at?: string;
 }
@@ -117,10 +119,15 @@ export interface LiveStatus {
     model: string;
     status: "waiting" | "thinking" | "posted" | "error";
     last_post?: Post;
+    /** Partial streaming output while agent is thinking */
+    streaming_text?: string;
+    persona?: string;
   }>;
   blackboard: BlackboardItem[];
   pending_guidance: number;
   recent_posts: Post[];
+  /** Latest progress message for display */
+  latest_event?: string;
 }
 
 // ─── Progress Events for Real-time Notifications ────────────────────────────
