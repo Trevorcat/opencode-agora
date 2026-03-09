@@ -118,9 +118,9 @@ export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
   }
 
   // Calculate layout dimensions
-  const headerHeight = 3;
-  const footerHeight = inputMode === 'guidance' ? 5 : 3;
-  const contentHeight = height - headerHeight - footerHeight;
+  const headerHeight = 4;
+  const footerHeight = inputMode === 'guidance' ? 6 : 4;
+  const contentHeight = Math.max(10, height - headerHeight - footerHeight);
   const leftWidth = Math.floor(width * 0.20);
   const centerWidth = Math.floor(width * 0.50);
   const rightWidth = width - leftWidth - centerWidth;
@@ -151,6 +151,12 @@ export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
             posts={liveStatus.recent_posts}
             selectedIndex={selectedPostIndex}
             expandedPostId={expandedPostId}
+            onPostClick={(postId) => {
+              setExpandedPostId(expandedPostId === postId ? null : postId);
+              // Also update selected index to match clicked post
+              const idx = liveStatus.recent_posts.findIndex((_, i) => `${liveStatus.recent_posts[i].role}-${i}` === postId);
+              if (idx >= 0) setSelectedPostIndex(idx);
+            }}
           />
         </box>
 

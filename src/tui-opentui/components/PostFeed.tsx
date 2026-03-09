@@ -5,6 +5,7 @@ export type PostFeedProps = {
   posts: Post[];
   selectedIndex: number;
   expandedPostId: string | null;
+  onPostClick?: (postId: string) => void;
 };
 
 const getAgentColor = (role: string): string => {
@@ -22,7 +23,8 @@ const getAgentColor = (role: string): string => {
 export const PostFeed: React.FC<PostFeedProps> = ({ 
   posts, 
   selectedIndex,
-  expandedPostId 
+  expandedPostId,
+  onPostClick 
 }) => {
   const [spinnerFrame, setSpinnerFrame] = useState(0);
   
@@ -49,7 +51,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
       }}
     >
       <text style={{ bold: true, color: '#ffffff' }}>THE FORUM</text>
-      <text style={{ color: '#565f89' }}> (Scroll to navigate, Enter to expand)</text>
+      <text style={{ color: '#565f89' }}> (Scroll/Click to navigate, Enter/Click to expand)</text>
 
       {posts.length === 0 ? (
         <box 
@@ -94,6 +96,8 @@ export const PostFeed: React.FC<PostFeedProps> = ({
                   marginBottom: 1,
                   flexDirection: 'column'
                 }}
+                // @ts-ignore OpenTUI mouse event
+                onMouseDown={() => onPostClick?.(postId)}
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <text style={{ bold: true, color: roleColor }}>

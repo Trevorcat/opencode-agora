@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export type BlackboardItemType = 'consensus' | 'checkpoint' | 'note' | 'guidance';
 
@@ -35,6 +35,7 @@ const getTypeIcon = (type: string): string => {
 };
 
 export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const visibleItems = items.slice(-8);
 
   return (
@@ -48,9 +49,10 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
       }}
     >
       <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <text style={{ bold: true, color: '#ffffff' }}>SYNTAGMA</text>
-        <text style={{ color: '#565f89' }}>[{items.length} items 🖱]</text>
+        <text style={{ bold: true, color: '#ffffff' }}>BLACKBOARD</text>
+        <text style={{ color: '#565f89' }}>[{items.length} items]</text>
       </box>
+      <text style={{ color: '#565f89' }}> (Click items to expand)</text>
 
       {visibleItems.length === 0 ? (
         <box style={{ padding: 2 }}>
@@ -68,21 +70,27 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
           {visibleItems.map((item, index) => {
             const typeColor = getTypeColor(item.type);
             const isLast = index === visibleItems.length - 1;
+            const isExpanded = expandedItemId === item.id;
+            const content = isExpanded 
+              ? item.content 
+              : `${item.content.substring(0, 35)}${item.content.length > 35 ? '...' : ''}`;
             
             return (
               <box 
                 key={item.id}
                 style={{ 
-                  borderStyle: isLast ? 'bold' : 'single',
+                  borderStyle: isExpanded ? 'double' : (isLast ? 'bold' : 'single'),
                   borderColor: typeColor,
                   padding: 1,
                   marginBottom: 1,
                   flexDirection: 'column'
                 }}
+                // @ts-ignore OpenTUI mouse event
+                onMouseDown={() => setExpandedItemId(isExpanded ? null : item.id)}
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <text style={{ color: typeColor }}>
-                    {getTypeIcon(item.type)} {item.type.toUpperCase()}
+                    {getTypeIcon(item.type)} {item.type.toUpperCase()}{isExpanded ? ' [EXPANDED]' : ''}
                   </text>
                   {item.author && (
                     <text style={{ color: '#565f89' }}>
@@ -92,9 +100,7 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
                 </box>
                 
                 <box style={{ paddingLeft: 1, marginTop: 1 }}>
-                  <text style={{ color: '#c0caf5' }}>
-                    {item.content.substring(0, 35)}{item.content.length > 35 ? '...' : ''}
-                  </text>
+                  <text style={{ color: '#c0caf5' }}>{content}</text>
                 </box>
                 
                 {item.timestamp && (
