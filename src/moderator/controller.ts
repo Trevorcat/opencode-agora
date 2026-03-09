@@ -265,7 +265,6 @@ export class DebateController {
    * Start debate asynchronously (returns immediately with abort control)
    */
   runDebateAsync(params: RunDebateParams): RunDebateAsyncResult {
-    const abortController = new AbortController();
     const { topicId } = params;
     
     // Override with abort-aware params
@@ -287,8 +286,12 @@ export class DebateController {
       topicId,
       promise,
       abort: () => {
-        abortController.abort();
-        this.abortControllers.delete(topicId);
+        // Abort the controller that runDebate registered under topicId
+        const stored = this.abortControllers.get(topicId);
+        if (stored) {
+          stored.abort();
+          this.abortControllers.delete(topicId);
+        }
       },
     };
   }
