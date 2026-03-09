@@ -4,7 +4,10 @@ import path from 'node:path';
 import { runTUI } from './App.js';
 import { BlackboardStore } from '../blackboard/store.js';
 import { DebateController } from '../moderator/controller.js';
-import { loadOpenCodeConfig, resolveProviders } from '../config/opencode-loader.js';
+import { loadOpenCodeConfig, resolveProviders, listAvailableModels } from '../config/opencode-loader.js';
+import type { AvailableModel } from '../config/opencode-loader.js';
+import { listPresets } from '../config/presets.js';
+import type { PresetSummary } from '../config/presets.js';
 import { logger } from '../utils/logger.js';
 
 async function main() {
@@ -15,27 +18,31 @@ async function main() {
     allowPositionals: true,
   });
 
-  // Get topicId from args or positional
-  const topicId = values.topicId || positionals[0];
-  
-  if (!topicId) {
-    console.error('Usage: opencode-agora-tui <topicId>');
-    console.error('   or: opencode-agora-tui -t <topicId>');
-    process.exit(1);
-  }
+  // Get topicId from args or positional (optional now - can launch without for preset picker)
+  const topicId = values.topicId || positionals[0] || null;
 
   const agoraDir = process.env.AGORA_DIR || path.join(process.cwd(), '.agora');
   logger.info(`Starting Agora TUI for topic: ${topicId}`);
 
-  // Load provider configuration
+  // Load provider configuration and available models
   let providers;
+  let availableModels: AvailableModel[] = [];
   try {
     const openCodeConfig = await loadOpenCodeConfig();
     providers = resolveProviders(openCodeConfig);
-    logger.info(`Loaded ${providers.size} provider(s)`);
+    availableModels = listAvailableModels(openCodeConfig);
+    logger.info(`Loaded ${providers.size} provider(s), ${availableModels.length} model(s)`);
   } catch (error) {
     logger.error('Failed to load OpenCode config, using empty providers:', error);
     providers = new Map();
+  }
+
+  // Load presets for picker mode
+  let presets: PresetSummary[] = [];
+  try {
+    presets = await listPresets(agoraDir);
+  } catch (error) {
+    logger.debug('Failed to load presets:', error);
   }
 
   // Initialize store
@@ -54,7 +61,7 @@ async function main() {
   });
 
   // Run the OpenTUI app
-  await runTUI(topicId, store, controller);
+  await runTUI(topicId, store, controller, availableModels, presets, agoraDir, providers);
 }
 
 main().catch((err) => {

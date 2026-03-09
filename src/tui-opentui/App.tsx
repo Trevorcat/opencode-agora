@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 // @ts-ignore OpenTUI uses different module resolution
 import { createCliRenderer } from '@opentui/core';
 // @ts-ignore OpenTUI uses different module resolution
-import { createRoot, useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { createRoot, useKeyboard, useTerminalDimensions, useRenderer } from '@opentui/react';
 import type { BlackboardStore } from '../blackboard/store.js';
 import type { DebateController } from '../moderator/controller.js';
 import type { LiveStatus } from '../blackboard/types.js';
+import type { AvailableModel } from '../config/opencode-loader.js';
+import type { PresetSummary } from '../config/presets.js';
+import type { ResolvedProvider } from '../blackboard/types.js';
 
 // Components
 import { Header } from './components/Header.js';
@@ -14,25 +17,58 @@ import { PostFeed } from './components/PostFeed.js';
 import { BlackboardPanel } from './components/BlackboardPanel.js';
 import { StatusBar } from './components/StatusBar.js';
 import { GuidanceInput } from './components/GuidanceInput.js';
+import { PresetPicker } from './components/PresetPicker.js';
+
+export type AppMode = 
+  | { kind: 'picker' }
+  | { kind: 'debate'; topicId: string };
 
 export type AppProps = {
-  topicId: string;
+  initialTopicId: string | null;
   store: BlackboardStore;
   controller: DebateController;
+  availableModels: AvailableModel[];
+  presets: PresetSummary[];
+  agoraDir: string;
+  providers: Map<string, ResolvedProvider>;
 };
 
-export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
+export const App: React.FC<AppProps> = ({ 
+  initialTopicId, 
+  store, 
+  controller, 
+  availableModels,
+  presets,
+}) => {
+  const [mode, setMode] = useState<AppMode>(
+    initialTopicId ? { kind: 'debate', topicId: initialTopicId } : { kind: 'picker' }
+  );
   const [inputMode, setInputMode] = useState<'normal' | 'guidance'>('normal');
   const [guidanceText, setGuidanceText] = useState('');
   const [liveStatus, setLiveStatus] = useState<LiveStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
+  const [overlayDismissed, setOverlayDismissed] = useState(false);
+  const [expandedAgentRole, setExpandedAgentRole] = useState<string | null>(null);
   
   const { width, height } = useTerminalDimensions();
+  const renderer = useRenderer();
+  const topicId = mode.kind === 'debate' ? mode.topicId : '';
+
+  // Force initial layout recalculation after mount.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      renderer.root.resize(renderer.width, renderer.height);
+      renderer.requestRender();
+    }, 30);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Poll for live status
   useEffect(() => {
+    if (mode.kind !== 'debate') return;
+
     const poll = async () => {
       try {
         const status = await store.getLiveStatus(topicId);
@@ -46,10 +82,16 @@ export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
     poll();
     const interval = setInterval(poll, 500);
     return () => clearInterval(interval);
-  }, [store, topicId]);
+  }, [store, topicId, mode.kind]);
+
+  useEffect(() => {
+    setOverlayDismissed(false);
+  }, [liveStatus?.status]);
 
   // Keyboard handling
   useKeyboard((key: { name: string; ctrl?: boolean }) => {
+    if (mode.kind !== 'debate') return;
+
     if (inputMode === 'guidance') {
       if (key.name === 'escape') {
         setInputMode('normal');
@@ -62,7 +104,12 @@ export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
 
     // Normal mode
     if (key.name === 'q' || (key.ctrl && key.name === 'c')) {
-      process.exit(0);
+      const isFinished = liveStatus?.status === 'completed' || liveStatus?.status === 'failed';
+      if (isFinished && !overlayDismissed) {
+        setOverlayDismissed(true);
+      } else {
+        process.exit(0);
+      }
     } else if (key.name === 'p') {
       controller.pauseDebate(topicId).catch(console.error);
     } else if (key.name === 'r') {
@@ -70,16 +117,23 @@ export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
     } else if (key.name === 'g') {
       setInputMode('guidance');
     } else if (key.name === 'up') {
-      setSelectedPostIndex(prev => Math.max(0, prev - 1));
+      if (!expandedAgentRole) setSelectedPostIndex(prev => Math.max(0, prev - 1));
     } else if (key.name === 'down') {
-      const maxPosts = liveStatus?.recent_posts.length || 0;
-      setSelectedPostIndex(prev => Math.min(maxPosts - 1, prev + 1));
+      if (!expandedAgentRole) {
+        const maxPosts = liveStatus?.recent_posts.length || 0;
+        setSelectedPostIndex(prev => Math.min(maxPosts - 1, prev + 1));
+      }
     } else if (key.name === 'return' || key.name === 'space') {
-      // Expand/collapse selected post
-      if (liveStatus?.recent_posts[selectedPostIndex]) {
+      // Expand/collapse selected post (only when agent panel select is not focused)
+      if (!expandedAgentRole && liveStatus?.recent_posts[selectedPostIndex]) {
         const post = liveStatus.recent_posts[selectedPostIndex];
         const postId = `${post.role}-${selectedPostIndex}`;
         setExpandedPostId(expandedPostId === postId ? null : postId);
+      }
+    } else if (key.name === 'escape') {
+      const isFinished = liveStatus?.status === 'completed' || liveStatus?.status === 'failed';
+      if (isFinished && !overlayDismissed) {
+        setOverlayDismissed(true);
       }
     }
   });
@@ -98,6 +152,24 @@ export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
     setInputMode('normal');
   };
 
+  // Show picker mode
+  if (mode.kind === 'picker') {
+    return (
+      <PresetPicker
+        presets={presets}
+        onStart={(newTopic, presetId) => {
+          // In a real implementation, we'd start the debate here
+          // For now, just log and wait for the user to provide a topicId
+          console.log(`Selected preset: ${presetId} for topic: ${newTopic}`);
+          console.log('Please start the debate via MCP server and then provide the topicId');
+          process.exit(0);
+        }}
+        onCancel={() => process.exit(0)}
+      />
+    );
+  }
+
+  // Debate mode
   if (error) {
     return (
       <box style={{ flexDirection: 'column', padding: 2 }}>
@@ -117,81 +189,141 @@ export const App: React.FC<AppProps> = ({ topicId, store, controller }) => {
     );
   }
 
-  // Calculate layout dimensions
-  const headerHeight = 4;
-  const footerHeight = inputMode === 'guidance' ? 6 : 4;
-  const contentHeight = Math.max(10, height - headerHeight - footerHeight);
-  const leftWidth = Math.floor(width * 0.20);
-  const centerWidth = Math.floor(width * 0.50);
-  const rightWidth = width - leftWidth - centerWidth;
+  const isPreparingRound = 
+    liveStatus.status === 'running' &&
+    liveStatus.current_round >= 1 &&
+    liveStatus.agents.every(a => a.status === 'posted');
 
   return (
     <box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
-      {/* Header */}
-      <box style={{ height: headerHeight }}>
-        <Header
-          question={liveStatus.topic_id}
-          status={liveStatus.status === 'paused' ? 'paused' : liveStatus.status === 'completed' ? 'completed' : 'running'}
-          topicId={topicId}
-          round={liveStatus.current_round}
-          totalRounds={liveStatus.total_rounds}
-        />
-      </box>
+        {/* Header - fixed 3 rows */}
+      <Header
+        question={liveStatus.topic_id}
+        // @ts-expect-error - Header type needs to be updated to support 'failed'
+        status={liveStatus.status === 'paused' ? 'paused' : liveStatus.status === 'completed' ? 'completed' : liveStatus.status === 'failed' ? 'failed' : 'running'}
+        topicId={topicId}
+        round={liveStatus.current_round}
+        totalRounds={liveStatus.total_rounds}
+      />
 
-      {/* Main content */}
-      <box style={{ flexDirection: 'row', height: contentHeight }}>
-        {/* Left panel - Agents */}
-        <box style={{ width: leftWidth, height: '100%' }}>
-          <AgentPanel agents={liveStatus.agents} />
+      {/* Main content - takes all remaining space */}
+      <box style={{ flexDirection: 'row', flexGrow: 1 }}>
+        {/* Left panel - Agents 20% */}
+        <box style={{ width: '20%' }}>
+          <AgentPanel
+            agents={liveStatus.agents}
+            availableModels={availableModels}
+            topicId={topicId}
+            store={store}
+            expandedRole={expandedAgentRole}
+            onExpandChange={setExpandedAgentRole}
+            isPreparingRound={isPreparingRound}
+          />
         </box>
 
-        {/* Center panel - Posts */}
-        <box style={{ width: centerWidth, height: '100%' }}>
+        {/* Center panel - Posts 50% */}
+        <box style={{ width: '50%' }}>
           <PostFeed
             posts={liveStatus.recent_posts}
             selectedIndex={selectedPostIndex}
             expandedPostId={expandedPostId}
             onPostClick={(postId) => {
               setExpandedPostId(expandedPostId === postId ? null : postId);
-              // Also update selected index to match clicked post
               const idx = liveStatus.recent_posts.findIndex((_, i) => `${liveStatus.recent_posts[i].role}-${i}` === postId);
               if (idx >= 0) setSelectedPostIndex(idx);
             }}
+            thinkingAgents={liveStatus.agents
+              .filter(a => a.status === 'thinking')
+              .map(a => ({ role: a.role, streaming_text: a.streaming_text }))}
           />
         </box>
 
-        {/* Right panel - Blackboard */}
-        <box style={{ width: rightWidth, height: '100%' }}>
+        {/* Right panel - Blackboard 30% */}
+        <box style={{ width: '30%' }}>
           <BlackboardPanel items={liveStatus.blackboard} />
         </box>
       </box>
 
-      {/* Footer */}
-      <box style={{ height: footerHeight }}>
-        {inputMode === 'guidance' ? (
-          <GuidanceInput
-            value={guidanceText}
-            onChange={setGuidanceText}
-            onSubmit={handleGuidanceSubmit}
-            onCancel={() => setInputMode('normal')}
-          />
-        ) : (
-          <StatusBar
-            round={liveStatus.current_round}
-            totalRounds={liveStatus.total_rounds}
-            paused={liveStatus.status === 'paused'}
-            pendingGuidance={liveStatus.pending_guidance}
-          />
-        )}
-      </box>
+      {/* Footer - fixed 3 rows */}
+      {inputMode === 'guidance' ? (
+        <GuidanceInput
+          value={guidanceText}
+          onChange={setGuidanceText}
+          onSubmit={handleGuidanceSubmit}
+          onCancel={() => setInputMode('normal')}
+        />
+      ) : (
+        <StatusBar
+          round={liveStatus.current_round}
+          totalRounds={liveStatus.total_rounds}
+          paused={liveStatus.status === 'paused'}
+          pendingGuidance={liveStatus.pending_guidance}
+          latestEvent={liveStatus.latest_event}
+          status={liveStatus.status}
+        />
+      )}
+
+      {/* Completion Overlay */}
+      {!overlayDismissed && (liveStatus.status === 'completed' || liveStatus.status === 'failed') && (
+        <box
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 40,
+            height: 5,
+            marginLeft: -20,
+            marginTop: -2,
+            borderStyle: 'double',
+            borderColor: liveStatus.status === 'completed' ? '#7aa2f7' : '#f7768e',
+            backgroundColor: '#1a1b26',
+            justifyContent: 'center',
+            alignItems: 'center',
+            flexDirection: 'column',
+            padding: 1
+          }}
+        >
+          <text style={{ bold: true, color: liveStatus.status === 'completed' ? '#7aa2f7' : '#f7768e' }}>
+            {liveStatus.status === 'completed' ? '✓ DEBATE COMPLETED' : '✗ DEBATE FAILED'}
+          </text>
+          <text style={{ color: '#565f89', marginTop: 1 }}>Esc / Q to dismiss · Q again to quit</text>
+        </box>
+      )}
     </box>
   );
 };
 
-export async function runTUI(topicId: string, store: BlackboardStore, controller: DebateController) {
+export async function runTUI(
+  topicId: string | null, 
+  store: BlackboardStore, 
+  controller: DebateController, 
+  availableModels: AvailableModel[] = [],
+  presets: PresetSummary[] = [],
+  agoraDir: string = '',
+  providers: Map<string, ResolvedProvider> = new Map()
+) {
   const renderer = await createCliRenderer({
     exitOnCtrlC: true,
   });
 
-  createRoot(renderer).render(<App topicId={topicId} store={store} controller={controller} />);
+  createRoot(renderer).render(
+    <App 
+      initialTopicId={topicId} 
+      store={store} 
+      controller={controller} 
+      availableModels={availableModels} 
+      presets={presets}
+      agoraDir={agoraDir}
+      providers={providers}
+    />
+  );
+
+  // Force an initial layout pass after the React tree mounts.
+  setTimeout(() => {
+    const stdout = process.stdout;
+    const w = stdout.columns || renderer.width;
+    const h = stdout.rows || renderer.height;
+    renderer.root.resize(w, h);
+    renderer.requestRender();
+  }, 50);
 }
