@@ -1,33 +1,53 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { LiveStatus } from './Header.js';
+import { AnimatedStatus, StatusType } from './AnimatedStatus.js';
+import { BORDERS, getAgentColor, BOX } from '../design-tokens.js';
 
-export type AgentPanelProps = { agents: LiveStatus["agents"] };
+export interface AgentData {
+  id: string;
+  role: string;
+  model: string;
+  status: string;
+  progress?: number;
+}
+
+export interface AgentPanelProps {
+  agents: AgentData[];
+}
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({ agents }) => {
-  const getStatusIndicator = (status: string) => {
-    switch (status) {
-      case 'waiting': return <Text color="gray">●</Text>;
-      case 'thinking': return <Text color="yellow">◐</Text>;
-      case 'posted': return <Text color="green">✓</Text>;
-      case 'error': return <Text color="red">✗</Text>;
-      default: return <Text color="gray">●</Text>;
-    }
-  };
-
   return (
-    <Box borderStyle="single" borderColor="blue" flexDirection="column" width={24} paddingX={1}>
-      <Text bold underline color="white">Agents</Text>
-      <Box flexDirection="column" marginTop={1}>
-        {agents.map((agent: { id: string; role: string; model: string; status: string }) => (
-          <Box key={agent.id} flexDirection="column" marginBottom={1}>
-            <Box justifyContent="space-between">
-              <Text bold>{agent.role}</Text>
-              {getStatusIndicator(agent.status)}
+    <Box 
+      borderStyle={BORDERS.agents} 
+      borderColor={getAgentColor('user')} 
+      flexDirection="column" 
+      paddingX={1}
+      height="100%"
+    >
+      <Box paddingBottom={1}>
+        <Text bold color="white">AGENTS {BOX.horizontal.repeat(10)}</Text>
+      </Box>
+
+      <Box flexDirection="column" gap={1}>
+        {agents.map((agent) => {
+          const color = getAgentColor(agent.role);
+          const st = agent.status as StatusType;
+          return (
+            <Box key={agent.id} flexDirection="column" borderStyle="single" borderColor={color} paddingX={1}>
+              <Box justifyContent="space-between">
+                <Text bold color={color}>[{agent.role.toUpperCase()}]</Text>
+              </Box>
+              <Text dimColor wrap="truncate">{agent.model}</Text>
+              <Box marginTop={1}>
+                <AnimatedStatus 
+                  status={st} 
+                  progress={agent.progress} 
+                  label={agent.status.toUpperCase()} 
+                />
+              </Box>
             </Box>
-            <Text dimColor>{agent.model}</Text>
-          </Box>
-        ))}
+          );
+        })}
       </Box>
     </Box>
   );

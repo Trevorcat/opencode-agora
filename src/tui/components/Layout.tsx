@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Box, Text } from 'ink';
+import { Box } from 'ink';
 
 interface LayoutProps {
   header: ReactNode;
@@ -14,35 +14,35 @@ export const Layout: React.FC<LayoutProps> = ({
   leftPanel,
   centerPanel,
   rightPanel,
-  footer
+  footer,
 }) => {
   return (
     <Box flexDirection="column" height="100%" width="100%">
-      {/* High-impact Header */}
-      <Box height={3} borderStyle="double" borderColor="magenta">
+      {/* Header - Fixed height */}
+      <Box height={3}>
         {header}
       </Box>
 
-      {/* Main Asymmetrical 3-Column Content Area */}
-      <Box flexGrow={1} flexDirection="row">
-        {/* Left Column: AgentPanel - Slim, tight */}
-        <Box width="20%" borderStyle="bold" borderColor="cyan" paddingX={1}>
+      {/* Main Content Area - 20/50/30 Split */}
+      <Box flexGrow={1} flexDirection="row" width="100%">
+        {/* Left Panel - Agents (20%) */}
+        <Box width="20%">
           {leftPanel}
         </Box>
 
-        {/* Center Column: PostFeed - The main stage */}
-        <Box width="55%" borderStyle="round" borderColor="white" paddingX={1}>
+        {/* Center Panel - Forum (50%) */}
+        <Box width="50%">
           {centerPanel}
         </Box>
 
-        {/* Right Column: BlackboardPanel - Data heavy */}
-        <Box width="25%" borderStyle="single" borderColor="yellow" paddingX={1}>
+        {/* Right Panel - Blackboard (30%) */}
+        <Box width="30%">
           {rightPanel}
         </Box>
       </Box>
 
-      {/* Footer / StatusBar - Sharp accent */}
-      <Box height={3} borderStyle="classic" borderColor="green">
+      {/* Footer - Fixed height */}
+      <Box height={3}>
         {footer}
       </Box>
     </Box>

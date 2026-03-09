@@ -2,44 +2,68 @@
 import React from 'react';
 import { render } from 'ink';
 import { parseArgs } from 'node:util';
-import { App, BlackboardStore, DebateController } from './App.js';
-
-// Mock config loader for this context
-const loadConfig = async () => ({
-  providers: []
-});
+import path from 'node:path';
+import { App } from './App.js';
+import { BlackboardStore } from '../blackboard/store.js';
+import { DebateController } from '../moderator/controller.js';
+import { loadOpenCodeConfig, resolveProviders } from '../config/opencode-loader.js';
+import { logger } from '../utils/logger.js';
 
 async function main() {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     options: {
       topicId: { type: 'string', short: 't' },
     },
     allowPositionals: true,
   });
 
-  const topicId = values.topicId || 'nexus-convergence';
+  // Get topicId from args or positional
+  const topicId = values.topicId || positionals[0];
+  
+  if (!topicId) {
+    console.error('Usage: opencode-agora-tui <topicId>');
+    console.error('   or: opencode-agora-tui -t <topicId>');
+    process.exit(1);
+  }
 
-  // Load configuration and initialize core subsystems
-  await loadConfig();
+  const agoraDir = process.env.AGORA_DIR || path.join(process.cwd(), '.agora');
+  logger.info(`Starting Agora TUI for topic: ${topicId}`);
 
-  // Basic mocks to allow running standalone TUI tests
-  const store: BlackboardStore = {
-    getState: () => ({}),
-    subscribe: () => () => {},
-  };
+  // Load provider configuration
+  let providers;
+  try {
+    const openCodeConfig = await loadOpenCodeConfig();
+    providers = resolveProviders(openCodeConfig);
+    logger.info(`Loaded ${providers.size} provider(s)`);
+  } catch (error) {
+    logger.error('Failed to load OpenCode config, using empty providers:', error);
+    providers = new Map();
+  }
 
-  let controllerStatus: 'Running' | 'Paused' | 'Stopped' = 'Running';
-  const controller: DebateController = {
-    pause: () => { controllerStatus = 'Paused'; },
-    resume: () => { controllerStatus = 'Running'; },
-    injectGuidance: (g) => console.log('Injected:', g),
-    getStatus: () => controllerStatus,
-  };
+  // Initialize store
+  const store = new BlackboardStore(agoraDir);
+  await store.init();
+
+  // Initialize controller
+  const controller = new DebateController({
+    store,
+    providers,
+    retryOpts: {
+      maxAttempts: 3,
+      baseDelayMs: 1_000,
+    },
+    timeoutMs: 60_000,
+  });
 
   const { clear } = render(<App topicId={topicId} store={store} controller={controller} />);
   
   // Clean exit handling
   process.on('SIGINT', () => {
+    clear();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
     clear();
     process.exit(0);
   });

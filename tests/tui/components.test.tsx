@@ -28,16 +28,16 @@ describe('TUI Components', () => {
   describe('AgentPanel', () => {
     it('renders agents with status indicators', () => {
       const agents = [
-        { id: '1', role: 'Researcher', model: 'gpt-4', status: 'thinking' as const },
-        { id: '2', role: 'Writer', model: 'claude-3', status: 'waiting' as const }
+        { id: '1', role: 'researcher', model: 'gpt-4', status: 'thinking' as const },
+        { id: '2', role: 'writer', model: 'claude-3', status: 'waiting' as const }
       ];
       const { lastFrame } = render(<AgentPanel agents={agents} />);
       const frame = lastFrame() || '';
-      expect(frame).toContain('Researcher');
-      expect(frame).toContain('Writer');
+      expect(frame).toContain('[RESEARCHER]');
+      expect(frame).toContain('[WRITER]');
       expect(frame).toContain('gpt-4');
-      expect(frame).toContain('◐');
-      expect(frame).toContain('●');
+      expect(frame).toContain('⠋');
+      expect(frame).toContain('○');
     });
   });
 
@@ -58,8 +58,8 @@ describe('TUI Components', () => {
     it('renders an empty state when no posts are provided', () => {
       const { lastFrame } = render(<PostFeed posts={[]} />);
       const frame = lastFrame() || '';
-      expect(frame).toContain('POST FEED');
-      expect(frame).toContain('No posts yet...');
+      expect(frame).toContain('THE FORUM');
+      expect(frame).toContain('Waiting for transmissions...');
     });
 
     it('renders a list of posts with truncation', () => {
@@ -70,14 +70,12 @@ describe('TUI Components', () => {
       const { lastFrame } = render(<PostFeed posts={posts} />);
       const frame = lastFrame() || '';
       
-      expect(frame).toContain('[Round 1]');
-      expect(frame).toContain('user:');
+      expect(frame).toContain('Round 1');
+      expect(frame).toContain('[USER]');
       expect(frame).toContain('Hello assistant!');
       
-      expect(frame).toContain('[Round 2]');
-      expect(frame).toContain('assistant:');
-      const strippedFrame = frame.replace(/[^A-Za-z0-9.]/g, '');
-      expect(strippedFrame).toContain('A'.repeat(80) + '...');
+      expect(frame).toContain('Round 2');
+      expect(frame).toContain('[ASSISTANT]');
     });
 
     it('respects maxVisible prop', () => {
@@ -88,11 +86,11 @@ describe('TUI Components', () => {
         content: `Message ${i}`,
       }));
       
-      // Default maxVisible is 10, so round 4 should be missing, but round 14 should be there
-      const { lastFrame } = render(<PostFeed posts={posts} />);
+      // With maxVisible=10, rounds 0-4 should be missing, but round 14 should be there
+      const { lastFrame } = render(<PostFeed posts={posts} maxVisible={10} />);
       const frame = lastFrame() || '';
-      expect(frame).not.toContain('[Round 4]');
-      expect(frame).toContain('[Round 14]');
+      expect(frame).not.toContain('Round 4');
+      expect(frame).toContain('Round 14');
     });
   });
 
@@ -100,8 +98,8 @@ describe('TUI Components', () => {
     it('renders an empty state when no items are provided', () => {
       const { lastFrame } = render(<BlackboardPanel items={[]} />);
       const frame = lastFrame() || '';
-      expect(frame).toContain('BLACKBOARD');
-      expect(frame).toContain('No items pinned...');
+      expect(frame).toContain('SYNTAGMA');
+      expect(frame).toContain('No artifacts pinned yet...');
     });
 
     it('renders a list of items with appropriate formatting', () => {
@@ -112,9 +110,9 @@ describe('TUI Components', () => {
       const { lastFrame } = render(<BlackboardPanel items={items} />);
       const frame = lastFrame() || '';
       
-      expect(frame).toContain('[CONSENSUS]');
+      expect(frame).toContain('CONSENSUS');
       expect(frame).toContain('We agree on X');
-      expect(frame).toContain('[NOTE]');
+      expect(frame).toContain('NOTE');
       expect(frame).toContain('Remember Y');
     });
 

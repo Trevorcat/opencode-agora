@@ -24,9 +24,9 @@ export const Header: React.FC<HeaderProps> = ({ question, status, topicId, round
 
   let statusBadge;
   if (status === 'running') {
-    statusBadge = <Text color="green">● RUNNING</Text>;
+    statusBadge = <Text color="green" bold>[● RUNNING]</Text>;
   } else if (status === 'paused') {
-    statusBadge = <Text color="yellow">⏸ PAUSED</Text>;
+    statusBadge = <Text color="yellow" bold>[⏸ PAUSED]</Text>;
   } else {
     statusBadge = <Text color="green">✓ COMPLETED</Text>;
   }
