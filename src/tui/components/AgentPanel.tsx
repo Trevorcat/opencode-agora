@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { LiveStatus } from './Header';
+import { LiveStatus } from './Header.js';
 
 export type AgentPanelProps = { agents: LiveStatus["agents"] };
 
@@ -19,7 +19,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ agents }) => {
     <Box borderStyle="single" borderColor="blue" flexDirection="column" width={24} paddingX={1}>
       <Text bold underline color="white">Agents</Text>
       <Box flexDirection="column" marginTop={1}>
-        {agents.map((agent) => (
+        {agents.map((agent: { id: string; role: string; model: string; status: string }) => (
           <Box key={agent.id} flexDirection="column" marginBottom={1}>
             <Box justifyContent="space-between">
               <Text bold>{agent.role}</Text>
