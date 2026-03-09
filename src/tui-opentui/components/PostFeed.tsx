@@ -97,11 +97,9 @@ export const PostFeed: React.FC<PostFeedProps> = ({
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <text style={{ bold: true, color: roleColor }}>
-                    [{post.role.toUpperCase()}]
+                    [{post.role.toUpperCase()}]{isSelected ? ' ★' : ''}{isExpanded ? ' [EXPANDED]' : ''}
                   </text>
                   <text style={{ color: '#565f89' }}>Round {post.round}</text>
-                  {isSelected && <text style={{ color: '#e0af68' }}>★</text>}
-                  {isExpanded && <text style={{ color: '#9ece6a' }}>[EXPANDED]</text>}
                 </box>
                 
                 <box style={{ paddingLeft: 1, marginTop: 1 }}>

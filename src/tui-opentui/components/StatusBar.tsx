@@ -36,13 +36,20 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {paused ? '⏸ PAUSED' : '● LIVE'}
       </text>
       
-      <text style={{ color: '#565f89' }}>
-        [<text style={{ bold: true, color: '#ffffff' }}>p</text>]ause 
-        {' '}[<text style={{ bold: true, color: '#ffffff' }}>r</text>]esume 
-        {' '}[<text style={{ bold: true, color: '#ffffff' }}>g</text>]uidance 
-        {' '}[<text style={{ bold: true, color: '#ffffff' }}>q</text>]uit
-        {' '}|🖱 Scroll
-      </text>
+      <box style={{ flexDirection: 'row' }}>
+        <text style={{ color: '#565f89' }}>[</text>
+        <text style={{ bold: true, color: '#ffffff' }}>p</text>
+        <text style={{ color: '#565f89' }}>]ause </text>
+        <text style={{ color: '#565f89' }}>[</text>
+        <text style={{ bold: true, color: '#ffffff' }}>r</text>
+        <text style={{ color: '#565f89' }}>]esume </text>
+        <text style={{ color: '#565f89' }}>[</text>
+        <text style={{ bold: true, color: '#ffffff' }}>g</text>
+        <text style={{ color: '#565f89' }}>]uidance </text>
+        <text style={{ color: '#565f89' }}>[</text>
+        <text style={{ bold: true, color: '#ffffff' }}>q</text>
+        <text style={{ color: '#565f89' }}>]uit |🖱 Scroll</text>
+      </box>
     </box>
   );
 };
