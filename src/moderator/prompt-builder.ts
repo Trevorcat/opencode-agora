@@ -1,4 +1,4 @@
-import type { AgentConfig, Post } from "../blackboard/types.js";
+import type { AgentConfig, BlackboardItem, Guidance, Post } from "../blackboard/types.js";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -41,8 +41,10 @@ export function buildRound1Prompt(params: {
   agent: AgentConfig;
   question: string;
   context?: string;
+  guidance?: Guidance[];
+  blackboard?: BlackboardItem[];
 }): ChatMessage[] {
-  const { agent, question, context } = params;
+  const { agent, question, context, guidance, blackboard } = params;
 
   const system = [
     `You are participating as: ${agent.role}.`,
@@ -57,16 +59,36 @@ export function buildRound1Prompt(params: {
     "- open_questions: optional string[]",
   ].join("\n");
 
-  const user = [
+  const sections: string[] = [
     `Question: ${question}`,
-    context ? `Context: ${context}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ];
+
+  if (context) {
+    sections.push(`Context: ${context}`);
+  }
+
+  // Add pinned blackboard content
+  if (blackboard && blackboard.length > 0) {
+    const pinned = blackboard.filter(item => item.pinned);
+    if (pinned.length > 0) {
+      sections.push("📌 Shared Blackboard (consensus/checkpoints):");
+      for (const item of pinned) {
+        sections.push(`  [${item.type}] ${item.content}`);
+      }
+    }
+  }
+
+  // Add human guidance
+  if (guidance && guidance.length > 0) {
+    sections.push("💡 Human Guidance:");
+    for (const g of guidance) {
+      sections.push(`  - ${g.content}`);
+    }
+  }
 
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: sections.join("\n\n") },
   ];
 }
 
@@ -76,8 +98,10 @@ export function buildRoundNPrompt(params: {
   round: number;
   prevPosts: Post[];
   context?: string;
+  guidance?: Guidance[];
+  blackboard?: BlackboardItem[];
 }): ChatMessage[] {
-  const { agent, question, round, prevPosts, context } = params;
+  const { agent, question, round, prevPosts, context, guidance, blackboard } = params;
   const previousRound = prevPosts.length
     ? prevPosts.map((post, index) => `Post ${index + 1}\n${formatPost(post)}`).join("\n\n")
     : "No previous posts provided.";
@@ -89,18 +113,39 @@ export function buildRoundNPrompt(params: {
     "Respond to peer positions directly and refine your own stance.",
   ].join("\n");
 
-  const user = [
+  const sections: string[] = [
     `Question: ${question}`,
-    context ? `Context: ${context}` : "",
-    `Round ${round} previous posts:`,
-    previousRound,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  ];
+
+  if (context) {
+    sections.push(`Context: ${context}`);
+  }
+
+  // Add pinned blackboard content
+  if (blackboard && blackboard.length > 0) {
+    const pinned = blackboard.filter(item => item.pinned);
+    if (pinned.length > 0) {
+      sections.push("📌 Shared Blackboard (consensus/checkpoints):");
+      for (const item of pinned) {
+        sections.push(`  [${item.type}] ${item.content}`);
+      }
+    }
+  }
+
+  // Add human guidance
+  if (guidance && guidance.length > 0) {
+    sections.push("💡 Human Guidance:");
+    for (const g of guidance) {
+      sections.push(`  - ${g.content}`);
+    }
+  }
+
+  sections.push(`Round ${round} previous posts:`);
+  sections.push(previousRound);
 
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: sections.join("\n\n") },
   ];
 }
 
@@ -108,8 +153,9 @@ export function buildVotePrompt(params: {
   agent: AgentConfig;
   question: string;
   allPosts: Post[][];
+  blackboard?: BlackboardItem[];
 }): ChatMessage[] {
-  const { agent, question, allPosts } = params;
+  const { agent, question, allPosts, blackboard } = params;
 
   const history = allPosts.length
     ? allPosts
@@ -130,22 +176,34 @@ export function buildVotePrompt(params: {
     "Prioritize strongest evidence and note unresolved disagreements.",
   ].join("\n");
 
-  const user = [
+  const sections: string[] = [
     `Question: ${question}`,
-    "Debate history:",
-    history,
-    "Return ONLY valid JSON with this schema:",
-    voteJsonSchema,
-    "Field requirements:",
-    "- chosen_position: string",
-    "- rationale: string",
-    "- confidence: number between 0-1",
-    "- dissent_notes: optional string",
-  ].join("\n\n");
+  ];
+
+  // Add pinned blackboard content
+  if (blackboard && blackboard.length > 0) {
+    const pinned = blackboard.filter(item => item.pinned);
+    if (pinned.length > 0) {
+      sections.push("📌 Shared Blackboard (established consensus):");
+      for (const item of pinned) {
+        sections.push(`  [${item.type}] ${item.content}`);
+      }
+    }
+  }
+
+  sections.push("Debate history:");
+  sections.push(history);
+  sections.push("Return ONLY valid JSON with this schema:");
+  sections.push(voteJsonSchema);
+  sections.push("Field requirements:");
+  sections.push("- chosen_position: string");
+  sections.push("- rationale: string");
+  sections.push("- confidence: number between 0-1");
+  sections.push("- dissent_notes: optional string");
 
   return [
     { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "user", content: sections.join("\n\n") },
   ];
 }
 
