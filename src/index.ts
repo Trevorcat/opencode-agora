@@ -2,7 +2,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import path from "node:path";
 import { createAgoraServer } from "./server.js";
 import { BlackboardStore } from "./blackboard/store.js";
-import { loadOpenCodeConfig, resolveProviders } from "./config/opencode-loader.js";
+import { loadOpenCodeConfig, resolveProviders, listAvailableModels } from "./config/opencode-loader.js";
 import { logger } from "./utils/logger.js";
 
 /** Default moderator model (fully qualified). Override via AGORA_MODERATOR_MODEL env. */
@@ -15,14 +15,16 @@ async function main() {
   // Load provider config from OpenCode's opencode.json
   const openCodeConfig = await loadOpenCodeConfig();
   const providers = resolveProviders(openCodeConfig);
+  const availableModels = listAvailableModels(openCodeConfig);
   logger.info(`Loaded ${providers.size} provider(s) from OpenCode config: ${[...providers.keys()].join(", ")}`);
+  logger.info(`${availableModels.length} models available`);
 
   const moderatorModel = process.env.AGORA_MODERATOR_MODEL ?? DEFAULT_MODERATOR_MODEL;
 
   const store = new BlackboardStore(agoraDir);
   await store.init();
 
-  const server = createAgoraServer({ store, agoraDir, providers, moderatorModel });
+  const server = createAgoraServer({ store, agoraDir, providers, moderatorModel, availableModels });
   const transport = new StdioServerTransport();
 
   await server.connect(transport);

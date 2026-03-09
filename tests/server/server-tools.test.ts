@@ -37,6 +37,45 @@ const mockPinToBlackboard = vi.fn<[], Promise<void>>().mockResolvedValue(undefin
 const mockAttachToTopic = vi.fn<[], Promise<void>>().mockResolvedValue(undefined);
 const mockDetachFromTopic = vi.fn<[], Promise<void>>().mockResolvedValue(undefined);
 
+vi.mock("../../src/config/presets.js", () => ({
+  listPresets: vi.fn().mockResolvedValue([
+    {
+      id: "default",
+      name: "Balanced Panel",
+      description: "3-agent balanced debate",
+      agent_count: 3,
+      roles: ["skeptic", "proponent", "pragmatist"],
+    },
+    {
+      id: "quick",
+      name: "Quick Debate",
+      description: "2-agent fast debate",
+      agent_count: 2,
+      roles: ["proponent", "skeptic"],
+    },
+  ]),
+  resolvePreset: vi.fn().mockResolvedValue([
+    {
+      role: "proponent",
+      persona: "You are an advocate.",
+      model: "lilith/gemini-3-flash-preview",
+    },
+    {
+      role: "skeptic",
+      persona: "You are a skeptic.",
+      model: "lilith/deepseek-v3-2-251201",
+    },
+  ]),
+  resolveAgentsWithDefaults: vi.fn().mockImplementation(async (_dir: string, agents: Array<{ role: string; persona?: string; model?: string }>) =>
+    agents.map((a) => ({
+      role: a.role,
+      persona: a.persona ?? `Default persona for ${a.role}`,
+      model: a.model ?? "lilith/deepseek-v3-2-251201",
+    }))
+  ),
+  savePreset: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../../src/moderator/controller.js", () => {
   // Must use a real constructor (class/function) so `new DebateController()`
   // works.  Arrow functions cannot be used as constructors.
@@ -145,6 +184,10 @@ describe("MCP server tools", () => {
       agoraDir: rootDir,
       providers: new Map(),
       moderatorModel: "test/model",
+      availableModels: [
+        { id: "lilith/deepseek-v3-2-251201", name: "DeepSeek V3.2", provider: "lilith" },
+        { id: "lilith/gemini-3-flash-preview", name: "Gemini 3 Flash", provider: "lilith" },
+      ],
     });
   });
 
@@ -699,6 +742,168 @@ describe("MCP server tools", () => {
 
       expect(result.isError).toBeUndefined();
       expect(data.topics).toHaveLength(0);
+    });
+  });
+
+  // ─── forum.list_presets ─────────────────────────────────────────────────────
+
+  describe("forum.list_presets", () => {
+    it("returns preset summaries", async () => {
+      const handler = getTool(server, "forum.list_presets");
+      const result = await handler({});
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.presets).toHaveLength(2);
+      expect(data.presets[0]).toMatchObject({
+        id: "default",
+        name: "Balanced Panel",
+        agent_count: 3,
+        roles: ["skeptic", "proponent", "pragmatist"],
+      });
+    });
+  });
+
+  // ─── forum.get_preset ───────────────────────────────────────────────────────
+
+  describe("forum.get_preset", () => {
+    it("returns full agent configs for a preset", async () => {
+      const handler = getTool(server, "forum.get_preset");
+      const result = await handler({ preset_id: "quick" });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.preset_id).toBe("quick");
+      expect(Array.isArray(data.agents)).toBe(true);
+      expect(data.agents[0]).toMatchObject({
+        role: "proponent",
+        model: expect.any(String),
+      });
+    });
+
+    it("respects agent_count parameter", async () => {
+      const handler = getTool(server, "forum.get_preset");
+      const result = await handler({ preset_id: "default", agent_count: 2 });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.preset_id).toBe("default");
+      expect(Array.isArray(data.agents)).toBe(true);
+    });
+
+    it("returns agents for preset (mocked)", async () => {
+      const handler = getTool(server, "forum.get_preset");
+      const result = await handler({ preset_id: "any-id" });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.preset_id).toBe("any-id");
+      expect(Array.isArray(data.agents)).toBe(true);
+    });
+  });
+
+  // ─── forum.list_models ──────────────────────────────────────────────────────
+
+  describe("forum.list_models", () => {
+    it("returns available models from config", async () => {
+      const handler = getTool(server, "forum.list_models");
+      const result = await handler({});
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(Array.isArray(data.models)).toBe(true);
+    });
+  });
+
+  // ─── forum.save_preset ──────────────────────────────────────────────────────
+
+  describe("forum.save_preset", () => {
+    it("saves a new preset and returns its id", async () => {
+      const handler = getTool(server, "forum.save_preset");
+      const result = await handler({
+        preset_id: "my-custom",
+        name: "My Custom Panel",
+        description: "Custom 2-agent debate",
+        agents: [
+          { role: "skeptic", model: "lilith/claude-opus-4-6" },
+          { role: "proponent" },
+        ],
+      });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.status).toBe("saved");
+      expect(data.preset_id).toBe("my-custom");
+    });
+
+    it("accepts valid preset_id and saves", async () => {
+      const handler = getTool(server, "forum.save_preset");
+      const result = await handler({
+        preset_id: "valid-custom-id",
+        name: "Test",
+        description: "Test",
+        agents: [{ role: "skeptic" }],
+      });
+
+      const data = parseResult(result);
+      expect(result.isError).toBeUndefined();
+      expect(data.status).toBe("saved");
+      expect(data.preset_id).toBe("valid-custom-id");
+    });
+  });
+
+  // ─── forum.start_debate_async with preset ───────────────────────────────────
+
+  describe("forum.start_debate_async with preset", () => {
+    it("accepts a preset param and resolves agents from it", async () => {
+      const handler = getTool(server, "forum.start_debate_async");
+      const result = await handler({
+        question: "Should we use Rust?",
+        preset: "quick",
+      });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.status).toBe("started");
+      expect(data.topicId).toBeTruthy();
+    });
+
+    it("accepts agents array with missing fields and fills via smart defaults", async () => {
+      const handler = getTool(server, "forum.start_debate_async");
+      const result = await handler({
+        question: "Should we use Rust?",
+        agents: [{ role: "skeptic" }, { role: "proponent" }],
+      });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.status).toBe("started");
+    });
+
+    it("accepts agent_count to limit agents from preset", async () => {
+      const handler = getTool(server, "forum.start_debate_async");
+      const result = await handler({
+        question: "Should we use Rust?",
+        preset: "default",
+        agent_count: 2,
+      });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.status).toBe("started");
+    });
+
+    it("explicit agents take priority over preset", async () => {
+      const handler = getTool(server, "forum.start_debate_async");
+      const result = await handler({
+        question: "Should we use Rust?",
+        preset: "quick",
+        agents: [{ role: "custom-agent" }],
+      });
+      const data = parseResult(result);
+
+      expect(result.isError).toBeUndefined();
+      expect(data.status).toBe("started");
     });
   });
 });

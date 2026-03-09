@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import crypto from "node:crypto";
 import { z } from "zod";
 
-import { getDefaultAgents } from "./agents/default-personas.js";
+import { getDefaultAgents, loadAgentConfig } from "./agents/default-personas.js";
 import { BlackboardStore } from "./blackboard/store.js";
 import type {
   AgentConfig,
@@ -13,6 +13,13 @@ import type {
 } from "./blackboard/types.js";
 import { ConsensusSynthesizer } from "./consensus/synthesizer.js";
 import { DebateController } from "./moderator/controller.js";
+import {
+  listPresets,
+  resolvePreset,
+  resolveAgentsWithDefaults,
+  savePreset,
+} from "./config/presets.js";
+import type { AvailableModel } from "./config/opencode-loader.js";
 
 interface ServerOptions {
   store: BlackboardStore;
@@ -20,6 +27,8 @@ interface ServerOptions {
   providers: Map<string, ResolvedProvider>;
   /** Fully qualified moderator model ID, e.g. "lilith/claude-opus-4-6" */
   moderatorModel: string;
+  /** Available models from OpenCode config for list_models tool */
+  availableModels: AvailableModel[];
   /** Optional callback for progress notifications */
   onProgress?: (event: ProgressEvent) => void | Promise<void>;
 }
@@ -64,7 +73,7 @@ async function setTopicMetadata(
 }
 
 export function createAgoraServer(opts: ServerOptions): McpServer {
-  const { store, providers, moderatorModel, onProgress } = opts;
+  const { store, agoraDir, providers, moderatorModel, availableModels, onProgress } = opts;
 
   // Track running async debates
   const runningDebates = new Map<string, RunningDebate>();
@@ -117,7 +126,7 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
       const topicId = generateTopicId();
 
       try {
-        const panel = agents ?? getDefaultAgents();
+        const panel = agents ?? await loadAgentConfig(agoraDir);
 
         const topic: Topic = {
           id: topicId,
@@ -195,23 +204,39 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
     {
       question: z.string().min(1),
       context: z.string().optional(),
+      preset: z.string().optional()
+        .describe("Named preset ID (from forum.list_presets). Expands to predefined agent configs."),
       agents: z
         .array(
           z.object({
             role: z.string().min(1),
-            persona: z.string().min(1),
-            model: z.string().min(1),
+            persona: z.string().optional()
+              .describe("Agent persona/instructions. Filled from role library if omitted."),
+            model: z.string().optional()
+              .describe("Model ID (provider/model). Uses role default if omitted."),
           }),
         )
-        .optional(),
+        .optional()
+        .describe("Explicit agent configs. Takes priority over preset. Missing fields filled from role library."),
+      agent_count: z.number().int().min(2).max(8).optional()
+        .describe("Limit agents from preset to first N (ignored when explicit agents provided)"),
       pause_after_rounds: z.array(z.number().int().min(1).max(3)).optional()
         .describe("Automatically pause after these round numbers"),
     },
-    async ({ question, context, agents, pause_after_rounds }) => {
+    async ({ question, context, preset, agents, agent_count, pause_after_rounds }) => {
       const topicId = generateTopicId();
 
       try {
-        const panel = agents ?? getDefaultAgents();
+        // Resolution order: explicit agents > preset > .agora/agents.json > DEFAULT_AGENTS
+        let panel: AgentConfig[];
+        if (agents && agents.length > 0) {
+          // Smart-fill missing persona/model from role library
+          panel = await resolveAgentsWithDefaults(agoraDir, agents);
+        } else if (preset) {
+          panel = await resolvePreset(agoraDir, preset, { agentCount: agent_count });
+        } else {
+          panel = await loadAgentConfig(agoraDir);
+        }
 
         const topic: Topic = {
           id: topicId,
@@ -578,6 +603,74 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
 
       return toToolResult({
         topics: summaries.filter((summary) => summary !== null),
+      });
+    },
+  );
+
+  // ─── New preset management tools ────────────────────────────────────────────
+
+  server.tool(
+    "forum.list_presets",
+    "List available debate presets with agent role configurations",
+    {},
+    async () => {
+      const presets = await listPresets(agoraDir);
+      return toToolResult({ presets });
+    },
+  );
+
+  server.tool(
+    "forum.get_preset",
+    "Get full agent configuration for a named debate preset",
+    {
+      preset_id: z.string().min(1).describe("Preset ID from forum.list_presets"),
+      agent_count: z.number().int().min(2).max(8).optional()
+        .describe("Limit number of agents (picks first N from preset)"),
+    },
+    async ({ preset_id, agent_count }) => {
+      try {
+        const agents = await resolvePreset(agoraDir, preset_id, { agentCount: agent_count });
+        return toToolResult({ preset_id, agents });
+      } catch (error) {
+        return toToolResult(
+          { preset_id, error: error instanceof Error ? error.message : String(error) },
+          true,
+        );
+      }
+    },
+  );
+
+  server.tool(
+    "forum.list_models",
+    "List all available model IDs from OpenCode providers",
+    {},
+    async () => {
+      return toToolResult({ models: availableModels });
+    },
+  );
+
+  server.tool(
+    "forum.save_preset",
+    "Save a custom debate preset for future reuse",
+    {
+      preset_id: z.string().min(1).regex(/^[a-z0-9-]+$/)
+        .describe("URL-safe preset identifier (lowercase, hyphens only)"),
+      name: z.string().min(1).describe("Human-readable name"),
+      description: z.string().min(1).describe("What this preset is for"),
+      agents: z.array(
+        z.object({
+          role: z.string().min(1),
+          persona: z.string().optional(),
+          model: z.string().optional(),
+        }),
+      ).min(2).max(8),
+    },
+    async ({ preset_id, name, description, agents }) => {
+      await savePreset(agoraDir, preset_id, { name, description, agents });
+      return toToolResult({
+        status: "saved",
+        preset_id,
+        message: `Preset "${preset_id}" saved. Use forum.start_debate_async with preset: "${preset_id}" to use it.`,
       });
     },
   );
