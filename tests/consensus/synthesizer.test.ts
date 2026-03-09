@@ -21,7 +21,6 @@ vi.mock("openai", () => {
 describe("ConsensusSynthesizer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.MOD_KEY = "fake";
   });
 
   it("synthesize returns consensus with expected topic and metadata", async () => {
@@ -42,11 +41,10 @@ describe("ConsensusSynthesizer", () => {
     });
 
     const synthesizer = new ConsensusSynthesizer({
-      provider: {
-        baseURL: "https://example.test",
-        apiKeyEnv: "MOD_KEY",
-      },
-      moderatorModel: "gpt-moderator",
+      providers: new Map([
+        ["test", { baseURL: "https://example.test", apiKey: "fake" }],
+      ]),
+      moderatorModel: "test/gpt-moderator",
     });
 
     const result = await synthesizer.synthesize({
@@ -69,7 +67,7 @@ describe("ConsensusSynthesizer", () => {
     expect(result.topic_id).toBe("topic-123");
     expect(result.conclusion).toBe("Adopt option A");
     expect(result.rounds_taken).toBe(2);
-    expect(result.generated_by).toBe("gpt-moderator");
+    expect(result.generated_by).toBe("test/gpt-moderator");
 
     expect(OpenAI).toHaveBeenCalledWith({
       baseURL: "https://example.test",
@@ -96,11 +94,10 @@ describe("ConsensusSynthesizer", () => {
     });
 
     const synthesizer = new ConsensusSynthesizer({
-      provider: {
-        baseURL: "https://example.test",
-        apiKeyEnv: "MOD_KEY",
-      },
-      moderatorModel: "gpt-moderator",
+      providers: new Map([
+        ["test", { baseURL: "https://example.test", apiKey: "fake" }],
+      ]),
+      moderatorModel: "test/gpt-moderator",
     });
 
     const result = await synthesizer.synthesize({

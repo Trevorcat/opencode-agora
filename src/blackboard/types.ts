@@ -10,8 +10,8 @@ export type DebateStatus =
 export interface AgentConfig {
   role: string;
   persona: string;
+  /** Fully qualified model ID: "provider/model", e.g. "lilith/claude-opus-4-6" */
   model: string;
-  provider: string;
 }
 
 export interface DebateConfig {
@@ -71,11 +71,27 @@ export interface Consensus {
   generated_by: string;
 }
 
-export interface ProviderConfig {
+// ─── OpenCode integration types ─────────────────────────────────────────────
+
+/** Resolved provider connection info, parsed from opencode.json */
+export interface ResolvedProvider {
   baseURL: string;
-  apiKeyEnv: string;
+  apiKey: string;
 }
 
-export interface AgoraConfig {
-  providers: Record<string, ProviderConfig>;
+/** Parsed from opencode.json provider.*.options */
+export interface OpenCodeProviderEntry {
+  name?: string;
+  options: {
+    baseURL: string;
+    apiKey: string; // raw value, may be "{env:VAR_NAME}" or a literal key
+  };
+  models: Record<string, { name: string; limit?: { context: number; output: number } }>;
+}
+
+/** Root shape of ~/.config/opencode/opencode.json (partial, what we need) */
+export interface OpenCodeConfig {
+  provider: Record<string, OpenCodeProviderEntry>;
+  model?: string;
+  small_model?: string;
 }

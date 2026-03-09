@@ -10,8 +10,7 @@ describe("prompt-builder", () => {
   const agent: AgentConfig = {
     role: "economist",
     persona: "Evidence-first analyst",
-    model: "gpt-x",
-    provider: "openai",
+    model: "openai/gpt-x",
   };
 
   it("buildRound1Prompt includes question, persona, and required JSON fields", () => {

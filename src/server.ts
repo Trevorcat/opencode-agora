@@ -6,9 +6,8 @@ import { getDefaultAgents } from "./agents/default-personas.js";
 import { BlackboardStore } from "./blackboard/store.js";
 import type {
   AgentConfig,
-  AgoraConfig,
   DebateStatus,
-  ProviderConfig,
+  ResolvedProvider,
   Topic,
 } from "./blackboard/types.js";
 import { ConsensusSynthesizer } from "./consensus/synthesizer.js";
@@ -17,7 +16,9 @@ import { DebateController } from "./moderator/controller.js";
 interface ServerOptions {
   store: BlackboardStore;
   agoraDir: string;
-  config?: AgoraConfig;
+  providers: Map<string, ResolvedProvider>;
+  /** Fully qualified moderator model ID, e.g. "lilith/claude-opus-4-6" */
+  moderatorModel: string;
 }
 
 function generateTopicId(): string {
@@ -32,48 +33,6 @@ function toToolResult(data: unknown, isError = false) {
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
     ...(isError ? { isError: true as const } : {}),
   };
-}
-
-function fallbackProviderConfig(): ProviderConfig {
-  return {
-    baseURL: process.env.AGORA_BASE_URL ?? process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-    apiKeyEnv: process.env.AGORA_API_KEY_ENV ?? "OPENAI_API_KEY",
-  };
-}
-
-function resolveProviders(
-  config: AgoraConfig | undefined,
-  agents: AgentConfig[],
-): Record<string, ProviderConfig> {
-  const configured = config?.providers ?? {};
-  const hasConfigured = Object.keys(configured).length > 0;
-
-  if (hasConfigured) {
-    return configured;
-  }
-
-  const fallback = fallbackProviderConfig();
-  const providers: Record<string, ProviderConfig> = {};
-  for (const agent of agents) {
-    providers[agent.provider] = fallback;
-  }
-
-  if (Object.keys(providers).length === 0) {
-    const defaultKey = process.env.AGORA_PROVIDER ?? "default";
-    providers[defaultKey] = fallback;
-  }
-
-  return providers;
-}
-
-function resolveModeratorProvider(config: AgoraConfig | undefined): ProviderConfig {
-  const providers = config?.providers ?? {};
-  const first = Object.values(providers)[0];
-  return first ?? fallbackProviderConfig();
-}
-
-function resolveModeratorModel(): string {
-  return process.env.AGORA_MODERATOR_MODEL ?? "gpt-4o-mini";
 }
 
 async function setTopicMetadata(
@@ -95,7 +54,7 @@ async function setTopicMetadata(
 }
 
 export function createAgoraServer(opts: ServerOptions): McpServer {
-  const { store, config } = opts;
+  const { store, providers, moderatorModel } = opts;
 
   const server = new McpServer({
     name: "opencode-agora",
@@ -114,7 +73,6 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
             role: z.string().min(1),
             persona: z.string().min(1),
             model: z.string().min(1),
-            provider: z.string().min(1),
           }),
         )
         .optional(),
@@ -124,7 +82,6 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
 
       try {
         const panel = agents ?? getDefaultAgents();
-        const providers = resolveProviders(config, panel);
 
         const topic: Topic = {
           id: topicId,
@@ -162,8 +119,8 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
         const allPosts = await Promise.all([1, 2, 3].map((round) => store.getRoundPosts(topicId, round)));
 
         const synthesizer = new ConsensusSynthesizer({
-          provider: resolveModeratorProvider(config),
-          moderatorModel: resolveModeratorModel(),
+          providers,
+          moderatorModel,
         });
 
         const consensus = await synthesizer.synthesize({

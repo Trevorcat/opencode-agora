@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OpenAI from "openai";
 
-import type { AgentConfig, ProviderConfig } from "../../src/blackboard/types.js";
+import type { AgentConfig, ResolvedProvider } from "../../src/blackboard/types.js";
 import { AgentProcessManager } from "../../src/agents/process-manager.js";
 
 vi.mock("openai", () => {
@@ -19,25 +19,20 @@ type OpenAIMockWithCreate = typeof OpenAI & {
   __mockCreate: ReturnType<typeof vi.fn>;
 };
 
-const providers: Record<string, ProviderConfig> = {
-  test: {
-    baseURL: "https://example.invalid/v1",
-    apiKeyEnv: "TEST_API_KEY",
-  },
-};
+const providers = new Map<string, ResolvedProvider>([
+  ["test", { baseURL: "https://example.invalid/v1", apiKey: "fake-key" }],
+]);
 
 const agent: AgentConfig = {
   role: "analyst",
   persona: "evidence-driven",
-  model: "gpt-test",
-  provider: "test",
+  model: "test/gpt-test",
 };
 
 const messages = [{ role: "user", content: "hello" }] as const;
 
 describe("AgentProcessManager", () => {
   beforeEach(() => {
-    process.env.TEST_API_KEY = "fake-key";
     vi.clearAllMocks();
   });
 
@@ -71,7 +66,7 @@ describe("AgentProcessManager", () => {
     expect(result.confidence).toBe(1);
 
     expect(mockCreate).toHaveBeenCalledWith({
-      model: agent.model,
+      model: "gpt-test",
       messages,
       response_format: { type: "json_object" },
     });
@@ -128,7 +123,7 @@ describe("AgentProcessManager", () => {
     expect(result.confidence).toBe(0);
 
     expect(mockCreate).toHaveBeenCalledWith({
-      model: agent.model,
+      model: "gpt-test",
       messages,
       response_format: { type: "json_object" },
     });

@@ -30,14 +30,12 @@ describe("DebateController", () => {
     {
       role: "economist",
       persona: "Focuses on incentives and trade-offs",
-      model: "gpt-x",
-      provider: "openai",
+      model: "openai/gpt-x",
     },
     {
       role: "ethicist",
       persona: "Focuses on fairness and harms",
-      model: "gpt-y",
-      provider: "openai",
+      model: "openai/gpt-y",
     },
   ];
 
@@ -74,12 +72,9 @@ describe("DebateController", () => {
 
     controller = new DebateController({
       store,
-      providers: {
-        openai: {
-          baseURL: "https://example.com/v1",
-          apiKeyEnv: "FAKE_API_KEY_ENV",
-        },
-      },
+      providers: new Map([
+        ["openai", { baseURL: "https://example.com/v1", apiKey: "fake-key" }],
+      ]),
       retryOpts: {
         maxAttempts: 1,
         baseDelayMs: 1,

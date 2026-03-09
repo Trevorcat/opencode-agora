@@ -1,11 +1,15 @@
+// src/agents/process-manager.ts
+// Calls LLM models via OpenAI-compatible API using providers from OpenCode config.
+
 import OpenAI from "openai";
 
 import type {
   AgentConfig,
   Post,
-  ProviderConfig,
+  ResolvedProvider,
   Vote,
 } from "../blackboard/types.js";
+import { resolveModelProvider } from "../config/opencode-loader.js";
 
 type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -17,16 +21,16 @@ type JsonRecord = Record<string, unknown>;
 export class AgentProcessManager {
   private readonly clients = new Map<string, OpenAI>();
 
-  constructor(private readonly providers: Record<string, ProviderConfig>) {}
+  constructor(private readonly providers: Map<string, ResolvedProvider>) {}
 
   async callAgent(
     agent: AgentConfig,
     messages: ChatMessage[],
     round: number,
   ): Promise<Post> {
-    const client = this.getClient(agent.provider);
+    const { client, modelName } = this.getClientForModel(agent.model);
     const response = await client.chat.completions.create({
-      model: agent.model,
+      model: modelName,
       messages,
       response_format: { type: "json_object" },
     });
@@ -52,9 +56,9 @@ export class AgentProcessManager {
   }
 
   async callVote(agent: AgentConfig, messages: ChatMessage[]): Promise<Vote> {
-    const client = this.getClient(agent.provider);
+    const { client, modelName } = this.getClientForModel(agent.model);
     const response = await client.chat.completions.create({
-      model: agent.model,
+      model: modelName,
       messages,
       response_format: { type: "json_object" },
     });
@@ -74,29 +78,24 @@ export class AgentProcessManager {
     };
   }
 
-  private getClient(providerKey: string): OpenAI {
-    const cached = this.clients.get(providerKey);
-    if (cached) {
-      return cached;
+  /**
+   * Resolve "provider/model" to an OpenAI client + bare model name.
+   * Clients are cached per provider.
+   */
+  private getClientForModel(fullModelId: string): { client: OpenAI; modelName: string } {
+    const { provider, modelName } = resolveModelProvider(fullModelId, this.providers);
+    const cacheKey = provider.baseURL;
+
+    let client = this.clients.get(cacheKey);
+    if (!client) {
+      client = new OpenAI({
+        apiKey: provider.apiKey,
+        baseURL: provider.baseURL,
+      });
+      this.clients.set(cacheKey, client);
     }
 
-    const provider = this.providers[providerKey];
-    if (!provider) {
-      throw new Error(`Unknown provider: ${providerKey}`);
-    }
-
-    const apiKey = process.env[provider.apiKeyEnv];
-    if (!apiKey) {
-      throw new Error(`Missing API key environment variable: ${provider.apiKeyEnv}`);
-    }
-
-    const client = new OpenAI({
-      apiKey,
-      baseURL: provider.baseURL,
-    });
-
-    this.clients.set(providerKey, client);
-    return client;
+    return { client, modelName };
   }
 
   private parseJSON(content: string | null | undefined): unknown {
@@ -120,7 +119,6 @@ export class AgentProcessManager {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new Error(message);
     }
-
     return value as JsonRecord;
   }
 
@@ -129,19 +127,13 @@ export class AgentProcessManager {
     if (typeof value !== "string" || value.length === 0) {
       throw new Error(`Missing or invalid ${key}`);
     }
-
     return value;
   }
 
   private readOptionalString(source: JsonRecord, key: string): string | undefined {
     const value = source[key];
-    if (value === undefined) {
-      return undefined;
-    }
-    if (typeof value !== "string") {
-      throw new Error(`Invalid ${key}`);
-    }
-
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") throw new Error(`Invalid ${key}`);
     return value;
   }
 
@@ -150,69 +142,42 @@ export class AgentProcessManager {
     if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
       throw new Error(`Missing or invalid ${key}`);
     }
-
     return value;
   }
 
-  private readOptionalStringArray(
-    source: JsonRecord,
-    key: string,
-  ): string[] | undefined {
+  private readOptionalStringArray(source: JsonRecord, key: string): string[] | undefined {
     const value = source[key];
-    if (value === undefined) {
-      return undefined;
-    }
+    if (value === undefined) return undefined;
     if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
       throw new Error(`Invalid ${key}`);
     }
-
     return value;
   }
 
   private readOptionalPeerResponses(source: JsonRecord): Post["responses_to_peers"] {
     const value = source.responses_to_peers;
-    if (value === undefined) {
-      return undefined;
-    }
-
-    if (!Array.isArray(value)) {
-      throw new Error("Invalid responses_to_peers");
-    }
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) throw new Error("Invalid responses_to_peers");
 
     const parsed: NonNullable<Post["responses_to_peers"]> = [];
     for (const item of value) {
       if (typeof item !== "object" || item === null || Array.isArray(item)) {
         throw new Error("Invalid responses_to_peers");
       }
-
       const record = item as JsonRecord;
       const toRole = this.readString(record, "to_role");
       const comment = this.readString(record, "comment");
       const stance = record.stance;
-
-      if (
-        stance !== "agree" &&
-        stance !== "partially_agree" &&
-        stance !== "disagree"
-      ) {
+      if (stance !== "agree" && stance !== "partially_agree" && stance !== "disagree") {
         throw new Error("Invalid responses_to_peers stance");
       }
-
-      parsed.push({
-        to_role: toRole,
-        stance,
-        comment,
-      });
+      parsed.push({ to_role: toRole, stance, comment });
     }
-
     return parsed;
   }
 
   private clampConfidence(value: unknown): number {
-    if (typeof value !== "number" || Number.isNaN(value)) {
-      return 0;
-    }
-
+    if (typeof value !== "number" || Number.isNaN(value)) return 0;
     return Math.max(0, Math.min(1, value));
   }
 }

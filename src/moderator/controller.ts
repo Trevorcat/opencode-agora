@@ -3,7 +3,7 @@ import { BlackboardStore } from "../blackboard/store.js";
 import type {
   AgentConfig,
   Post,
-  ProviderConfig,
+  ResolvedProvider,
 } from "../blackboard/types.js";
 import { withRetry, type RetryOptions } from "../resilience/retry.js";
 import { withTimeout } from "../resilience/timeout.js";
@@ -16,7 +16,7 @@ import {
 
 interface ControllerOptions {
   store: BlackboardStore;
-  providers: Record<string, ProviderConfig>;
+  providers: Map<string, ResolvedProvider>;
   retryOpts: RetryOptions;
   timeoutMs: number;
 }

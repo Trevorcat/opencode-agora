@@ -29,14 +29,12 @@ describe("BlackboardStore", () => {
         {
           role: "pro",
           persona: "Productivity researcher",
-          model: "gpt-5",
-          provider: "openai",
+          model: "openai/gpt-5",
         },
         {
           role: "con",
           persona: "Operations manager",
-          model: "gpt-5",
-          provider: "openai",
+          model: "openai/gpt-5",
         },
       ],
     },

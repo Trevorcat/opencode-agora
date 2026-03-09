@@ -3,12 +3,14 @@ import OpenAI from "openai";
 import type {
   Consensus,
   Post,
-  ProviderConfig,
+  ResolvedProvider,
   Vote,
 } from "../blackboard/types.js";
+import { resolveModelProvider } from "../config/opencode-loader.js";
 
 interface SynthesizerOptions {
-  provider: ProviderConfig;
+  providers: Map<string, ResolvedProvider>;
+  /** Fully qualified model ID, e.g. "lilith/claude-opus-4-6" */
   moderatorModel: string;
 }
 
@@ -24,16 +26,18 @@ type JsonRecord = Record<string, unknown>;
 
 export class ConsensusSynthesizer {
   private readonly client: OpenAI;
+  private readonly modelName: string;
 
   constructor(private readonly options: SynthesizerOptions) {
-    const apiKey = process.env[options.provider.apiKeyEnv];
-    if (!apiKey) {
-      throw new Error(`Missing API key environment variable: ${options.provider.apiKeyEnv}`);
-    }
+    const { provider, modelName } = resolveModelProvider(
+      options.moderatorModel,
+      options.providers,
+    );
+    this.modelName = modelName;
 
     this.client = new OpenAI({
-      baseURL: options.provider.baseURL,
-      apiKey,
+      baseURL: provider.baseURL,
+      apiKey: provider.apiKey,
     });
   }
 
@@ -43,7 +47,7 @@ export class ConsensusSynthesizer {
     const userPrompt = this.buildUserPrompt(params, voteDistribution);
 
     const response = await this.client.chat.completions.create({
-      model: this.options.moderatorModel,
+      model: this.modelName,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
