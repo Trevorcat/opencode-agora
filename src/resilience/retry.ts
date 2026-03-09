@@ -2,7 +2,7 @@ export interface RetryOptions {
   maxAttempts: number;
   baseDelayMs: number;
   skip?: boolean;
-  onSkip?: (error: Error) => void;
+  onSkip?: (error: Error) => void | Promise<void>;
   sleepFn?: (ms: number) => Promise<void>;
 }
 
@@ -34,7 +34,7 @@ export async function withRetry<T>(
   }
 
   if (skip && onSkip && lastError) {
-    onSkip(lastError);
+    await onSkip(lastError);
   }
 
   if (skip) {

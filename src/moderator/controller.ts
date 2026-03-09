@@ -142,39 +142,43 @@ export class DebateController {
                   guidance,
                 });
 
-          try {
-            const post = await this.callWithResilience(`${agent.role}-round-${round}`, () =>
-              this.processManager.callAgent(agent, prompt, round),
-            );
+          const label = `${agent.role}-round-${round}`;
+          const post = await withRetry(
+            () => withTimeout(() => this.processManager.callAgent(agent, prompt, round), { timeoutMs: this.timeoutMs, label }),
+            {
+              ...this.retryOpts,
+              skip: true,
+              onSkip: async (e) => {
+                console.error(`[SKIP] ${label}: ${e.message}`);
+                await this.notifyProgress({
+                  type: "agent_error",
+                  topic_id: topicId,
+                  round,
+                  agent: agent.role,
+                  error: e.message,
+                  timestamp: new Date().toISOString(),
+                });
+              },
+            },
+          );
 
-            if (post) {
-              await this.store.savePost(topicId, round, post);
-              
-              // Mark guidance as consumed if it was targeted at this agent
-              if (enableGuidance) {
-                await this.consumeTargetedGuidance(topicId, guidance, agent.role);
-              }
+          if (post) {
+            await this.store.savePost(topicId, round, post);
 
-              await this.notifyProgress({
-                type: "agent_posted",
-                topic_id: topicId,
-                round,
-                post,
-                timestamp: new Date().toISOString(),
-              });
-
-              return post;
+            // Mark guidance as consumed if it was targeted at this agent
+            if (enableGuidance) {
+              await this.consumeTargetedGuidance(topicId, guidance, agent.role);
             }
-          } catch (error) {
+
             await this.notifyProgress({
-              type: "agent_error",
+              type: "agent_posted",
               topic_id: topicId,
               round,
-              agent: agent.role,
-              error: error instanceof Error ? error.message : String(error),
+              post,
               timestamp: new Date().toISOString(),
             });
-            throw error;
+
+            return post;
           }
           return null;
         });

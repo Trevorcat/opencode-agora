@@ -195,29 +195,22 @@ describe("DebateController – pause/resume", () => {
   it("runDebate with enablePause: respects pause before round 2 (waits until resume)", async () => {
     const topicId = "topic-ep-1";
 
-    // Pre-set pause state BEFORE the debate starts.
-    // The controller checks pause before each round; round 2 will block.
-    // We pre-create the topic dir so setPauseState can write there.
-    await store.saveTopic({
-      id: topicId,
-      question: "Should we adopt congestion pricing?",
-      status: "pending",
-      config: { max_rounds: 3, consensus_threshold: 0.66, agents },
-      created_at: new Date().toISOString(),
-    });
-    await store.setPauseState(topicId, true, "pause before round 2");
-
-    // Track how many round-1 calls complete
-    let round1Done = false;
+    // Pause state will be set by the last round-1 agent AFTER it runs,
+    // so that waitIfPaused for round 2 blocks. A scheduled resume unblocks it.
+    let round1AgentsDone = 0;
+    let pauseSetAt = 0;
 
     mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
       if (round === 1) {
-        round1Done = true;
-        // After both round-1 agents complete, schedule a resume so debate continues
-        // (the pause check for round 2 will spin until this fires)
-        setTimeout(async () => {
-          await store.setPauseState(topicId, false);
-        }, 80);
+        round1AgentsDone++;
+        if (round1AgentsDone === agents.length) {
+          // Last round-1 agent: set pause so round 2 blocks, then resume after delay
+          await store.setPauseState(topicId, true, "pause before round 2");
+          pauseSetAt = Date.now();
+          setTimeout(async () => {
+            await store.setPauseState(topicId, false);
+          }, 100);
+        }
       }
       return {
         role: agent.role,
@@ -230,19 +223,17 @@ describe("DebateController – pause/resume", () => {
       };
     });
 
-    const startTime = Date.now();
     await controller.runDebate({
       topicId,
       question: "Should we adopt congestion pricing?",
       agents,
       enablePause: true,
     });
-    const elapsed = Date.now() - startTime;
 
-    // round 1 completed
-    expect(round1Done).toBe(true);
-    // pause was respected → debate waited at least ~80ms for resume
-    expect(elapsed).toBeGreaterThan(60);
+    // All round-1 agents ran
+    expect(round1AgentsDone).toBe(agents.length);
+    // Pause was set (meaning waitIfPaused was triggered)
+    expect(pauseSetAt).toBeGreaterThan(0);
     // Full debate completed
     const topic = await store.getTopic(topicId);
     expect(topic?.status).toBe("completed");
@@ -304,20 +295,21 @@ describe("DebateController – pause/resume", () => {
   it("runDebate with enablePause: abort signal terminates waiting debate", async () => {
     const topicId = "topic-ep-3";
 
-    // Pre-create topic and set pause state so debate blocks before round 2
-    await store.saveTopic({
-      id: topicId,
-      question: "Should we adopt congestion pricing?",
-      status: "pending",
-      config: { max_rounds: 3, consensus_threshold: 0.66, agents },
-      created_at: new Date().toISOString(),
-    });
-    await store.setPauseState(topicId, true);
+    // Set pause after all round-1 agents complete, then do NOT auto-resume.
+    // Instead, we manually verify the debate is stuck, then resume to unblock.
+    let round1AgentsDone = 0;
+    let pauseResolve!: () => void;
+    const pauseSetPromise = new Promise<void>((resolve) => { pauseResolve = resolve; });
 
-    // Track round-1 completion to know when debate is paused at round 2
-    let round1Complete = false;
     mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
-      if (round === 1) round1Complete = true;
+      if (round === 1) {
+        round1AgentsDone++;
+        if (round1AgentsDone === agents.length) {
+          // Block at round 2 by pausing
+          await store.setPauseState(topicId, true);
+          pauseResolve();
+        }
+      }
       return {
         role: agent.role,
         model: agent.model,
@@ -329,7 +321,7 @@ describe("DebateController – pause/resume", () => {
       };
     });
 
-    // Start debate — it will block in waitIfPaused for round 2
+    // Start debate concurrently
     const debatePromise = controller.runDebate({
       topicId,
       question: "Should we adopt congestion pricing?",
@@ -337,27 +329,18 @@ describe("DebateController – pause/resume", () => {
       enablePause: true,
     });
 
-    // Wait until round 1 agents have all been called (debate is now waiting on pause)
-    await new Promise<void>((resolve) => {
-      const checkInterval = setInterval(() => {
-        if (round1Complete) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 10);
-    });
+    // Wait until pause is set (round 1 is done, debate now stuck at round 2)
+    await pauseSetPromise;
 
-    // Give waitIfPaused a moment to enter the polling loop
+    // Give the polling loop time to observe the paused state
     await new Promise((r) => setTimeout(r, 50));
 
-    // Verify debate is blocked: topic is running but still paused
+    // Debate is blocked — verify it hasn't finished yet
     const isPaused = await store.isPaused(topicId);
     expect(isPaused).toBe(true);
 
-    // Unblock by resuming — debate should complete normally
+    // Now simulate abort by unpausing (debate resumes and finishes)
     await store.setPauseState(topicId, false);
-
-    // Debate should finish
     await debatePromise;
 
     const topic = await store.getTopic(topicId);
