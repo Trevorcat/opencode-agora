@@ -1,4 +1,5 @@
 import React from 'react';
+import { theme } from '../theme.js';
 
 export type StatusBarProps = {
   round: number;
@@ -18,23 +19,23 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   status
 }) => {
   let statusText = '● LIVE';
-  let statusColor = '#9ece6a';
+  let statusColor = theme.accent.green;
   if (status === 'completed') {
-    statusText = '✓ COMPLETED';
-    statusColor = '#7aa2f7';
+    statusText = '✅ COMPLETED';
+    statusColor = theme.accent.blue;
   } else if (status === 'failed') {
-    statusText = '✗ FAILED';
-    statusColor = '#f7768e';
+    statusText = '❌ FAILED';
+    statusColor = theme.accent.red;
   } else if (paused) {
     statusText = '⏸ PAUSED';
-    statusColor = '#f7768e';
+    statusColor = theme.accent.yellow;
   }
 
   return (
     <box 
       style={{ 
         borderStyle: 'single', 
-        borderColor: '#565f89',
+        borderColor: theme.text.dim,
         width: '100%',
         height: 3,
         flexDirection: 'row',
@@ -44,16 +45,16 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         paddingRight: 1,
       }}
     >
-      <text style={{ color: '#7aa2f7' }}>Progress: Round {round}/{totalRounds}</text>
+      <text style={{ color: theme.accent.blue }}>Progress: Round {round}/{totalRounds}</text>
 
       {latestEvent && (
-        <text style={{ color: '#565f89' }}>
+        <text style={{ color: theme.text.dim }}>
           {latestEvent.length > 40 ? latestEvent.substring(0, 37) + '...' : latestEvent}
         </text>
       )}
       
       {pendingGuidance > 0 && (
-        <text style={{ backgroundColor: '#bb9af7', color: '#1a1b26', bold: true }}>
+        <text style={{ backgroundColor: theme.accent.mauve, color: theme.bg.primary, bold: true }}>
           {' '}{pendingGuidance} GUIDANCE{' '}
         </text>
       )}
@@ -63,21 +64,21 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       </text>
       
       <box style={{ flexDirection: 'row' }}>
-        <text style={{ color: '#565f89' }}>[</text>
-        <text style={{ bold: true, color: '#ffffff' }}>Tab</text>
-        <text style={{ color: '#565f89' }}>] expand agent </text>
-        <text style={{ color: '#565f89' }}>[</text>
-        <text style={{ bold: true, color: '#ffffff' }}>p</text>
-        <text style={{ color: '#565f89' }}>]ause </text>
-        <text style={{ color: '#565f89' }}>[</text>
-        <text style={{ bold: true, color: '#ffffff' }}>r</text>
-        <text style={{ color: '#565f89' }}>]esume </text>
-        <text style={{ color: '#565f89' }}>[</text>
-        <text style={{ bold: true, color: '#ffffff' }}>g</text>
-        <text style={{ color: '#565f89' }}>]uidance </text>
-        <text style={{ color: '#565f89' }}>[</text>
-        <text style={{ bold: true, color: '#ffffff' }}>q</text>
-        <text style={{ color: '#565f89' }}>]uit |🖱 Scroll</text>
+        <text style={{ color: theme.text.dim }}>[</text>
+        <text style={{ bold: true, color: theme.text.primary }}>Tab</text>
+        <text style={{ color: theme.text.dim }}>] expand agent </text>
+        <text style={{ color: theme.text.dim }}>[</text>
+        <text style={{ bold: true, color: theme.text.primary }}>p</text>
+        <text style={{ color: theme.text.dim }}>]ause </text>
+        <text style={{ color: theme.text.dim }}>[</text>
+        <text style={{ bold: true, color: theme.text.primary }}>r</text>
+        <text style={{ color: theme.text.dim }}>]esume </text>
+        <text style={{ color: theme.text.dim }}>[</text>
+        <text style={{ bold: true, color: theme.text.primary }}>g</text>
+        <text style={{ color: theme.text.dim }}>]uidance </text>
+        <text style={{ color: theme.text.dim }}>[</text>
+        <text style={{ bold: true, color: theme.text.primary }}>q</text>
+        <text style={{ color: theme.text.dim }}>]uit |🖱 Scroll</text>
       </box>
     </box>
   );

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useKeyboard } from "@opentui/react";
 import type { PresetSummary } from "../../config/presets.js";
 import type { BlackboardStore } from "../../blackboard/store.js";
+import { theme } from "../theme.js";
 
 export type TopicManagerProps = {
   presets: PresetSummary[];
@@ -113,45 +114,45 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
   return (
     <box style={{ flexDirection: "column", padding: 2, width: "100%", height: "100%" }}>
-      <text style={{ bold: true, color: "#7aa2f7", marginBottom: 1 }}>
+      <text style={{ bold: true, color: theme.accent.blue, marginBottom: 1 }}>
         ⬡ AGORA — Multi-Agent Debate Launcher
       </text>
 
       {phase === "home" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: "#c0caf5", marginBottom: 1 }}>Select an action:</text>
-          <text style={{ color: "#e0af68" }}>[E] Enter existing topic</text>
-          <text style={{ color: "#9ece6a" }}>[N] Create new topic</text>
-          <text style={{ color: "#f7768e" }}>[Q] Quit</text>
+          <text style={{ color: theme.text.primary, marginBottom: 1 }}>Select an action:</text>
+          <text style={{ color: theme.accent.yellow }}>[E] Enter existing topic</text>
+          <text style={{ color: theme.accent.green }}>[N] Create new topic</text>
+          <text style={{ color: theme.accent.red }}>[Q] Quit</text>
         </box>
       )}
 
       {phase === "existing_topics" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: "#c0caf5", marginBottom: 1 }}>Select an existing topic:</text>
+          <text style={{ color: theme.text.primary, marginBottom: 1 }}>Select an existing topic:</text>
           {existingTopics.length === 0 ? (
-            <text style={{ color: "#565f89" }}>No existing topics found.</text>
+            <text style={{ color: theme.text.dim }}>No existing topics found.</text>
           ) : (
             existingTopics.map((t, i) => (
               <box key={t} style={{ flexDirection: "row" }}>
-                <text style={{ color: i === selectedTopicIdx ? "#7aa2f7" : "#565f89", width: 2 }}>
+                <text style={{ color: i === selectedTopicIdx ? theme.accent.blue : theme.text.dim, width: 2 }}>
                   {i === selectedTopicIdx ? "▶" : " "}
                 </text>
-                <text style={{ color: i === selectedTopicIdx ? "#e0af68" : "#c0caf5" }}>
+                <text style={{ color: i === selectedTopicIdx ? theme.accent.yellow : theme.text.primary }}>
                   {t}
                 </text>
               </box>
             ))
           )}
           {showDeleteConfirm && (
-            <box style={{ flexDirection: "column", marginTop: 1, borderStyle: "single", borderColor: "#f7768e", padding: 1 }}>
-              <text style={{ color: "#f7768e", bold: true }}>
+            <box style={{ flexDirection: "column", marginTop: 1, borderStyle: "single", borderColor: theme.accent.red, padding: 1 }}>
+              <text style={{ color: theme.accent.red, bold: true }}>
                 Delete topic "{existingTopics[selectedTopicIdx]}"?
               </text>
-              <text style={{ color: "#c0caf5" }}>[Y]es / [N]o</text>
+              <text style={{ color: theme.text.primary }}>[Y]es / [N]o</text>
             </box>
           )}
-          <text style={{ color: "#565f89", marginTop: 1 }}>
+          <text style={{ color: theme.text.dim, marginTop: 1 }}>
             ↑↓ navigate · Enter to resume · [D] delete · Esc to go back
           </text>
         </box>
@@ -159,22 +160,22 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
       {phase === "new_topic" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: "#c0caf5" }}>Enter debate topic or question:</text>
+          <text style={{ color: theme.text.primary }}>Enter debate topic or question:</text>
           <box
             style={{
               borderStyle: "single",
-              borderColor: "#7aa2f7",
+              borderColor: theme.accent.blue,
               marginTop: 1,
               padding: 1,
               width: "80%",
             }}
           >
-            <text style={{ color: "#e0af68" }}>
+            <text style={{ color: theme.accent.yellow }}>
               {topic}
-              <text style={{ color: "#7aa2f7" }}>█</text>
+              <text style={{ color: theme.accent.blue }}>█</text>
             </text>
           </box>
-          <text style={{ color: "#565f89", marginTop: 1 }}>
+          <text style={{ color: theme.text.dim, marginTop: 1 }}>
             Press Enter to continue · Esc to go back · Ctrl+C to quit
           </text>
         </box>
@@ -182,13 +183,13 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
       {phase === "preset" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: "#9ece6a", marginBottom: 1 }}>Topic: {topic}</text>
-          <text style={{ color: "#c0caf5", marginBottom: 1 }}>Select debate format:</text>
+          <text style={{ color: theme.accent.green, marginBottom: 1 }}>Topic: {topic}</text>
+          <text style={{ color: theme.text.primary, marginBottom: 1 }}>Select debate format:</text>
           {presets.map((p, i) => (
             <box key={p.id} style={{ flexDirection: "row", marginBottom: 0 }}>
               <text
                 style={{
-                  color: i === selectedPresetIdx ? "#7aa2f7" : "#565f89",
+                  color: i === selectedPresetIdx ? theme.accent.blue : theme.text.dim,
                   width: 2,
                 }}
               >
@@ -197,17 +198,17 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
               <box style={{ flexDirection: "column", marginLeft: 1 }}>
                 <text
                   style={{
-                    color: i === selectedPresetIdx ? "#e0af68" : "#c0caf5",
+                    color: i === selectedPresetIdx ? theme.accent.yellow : theme.text.primary,
                     bold: i === selectedPresetIdx,
                   }}
                 >
                   {p.id.padEnd(14)} — {p.name} ({p.agent_count} agents)
                 </text>
-                <text style={{ color: "#565f89" }}>  {p.description}</text>
+                <text style={{ color: theme.text.dim }}>  {p.description}</text>
               </box>
             </box>
           ))}
-          <text style={{ color: "#565f89", marginTop: 1 }}>
+          <text style={{ color: theme.text.dim, marginTop: 1 }}>
             ↑↓ navigate · Enter to start · Esc to go back
           </text>
         </box>

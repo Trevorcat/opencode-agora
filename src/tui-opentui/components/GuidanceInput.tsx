@@ -1,4 +1,5 @@
 import React from 'react';
+import { theme } from '../theme.js';
 
 export type GuidanceInputProps = {
   value: string;
@@ -17,7 +18,7 @@ export const GuidanceInput: React.FC<GuidanceInputProps> = ({
     <box 
       style={{ 
         borderStyle: 'single', 
-        borderColor: '#e0af68',
+        borderColor: theme.accent.yellow,
         width: '100%',
         height: 3,
         flexDirection: 'row',
@@ -26,7 +27,7 @@ export const GuidanceInput: React.FC<GuidanceInputProps> = ({
         paddingRight: 1,
       }}
     >
-      <text style={{ bold: true, color: '#e0af68' }}>⚡ INJECT GUIDANCE ➔ </text>
+      <text style={{ bold: true, color: theme.accent.yellow }}>⚡ INJECT GUIDANCE ➔ </text>
       <input
         value={value}
         onInput={onChange}
@@ -35,7 +36,7 @@ export const GuidanceInput: React.FC<GuidanceInputProps> = ({
         style={{ flexGrow: 1 }}
         focused={true}
       />
-      <text style={{ color: '#565f89' }}> (Enter to send, Esc to cancel)</text>
+      <text style={{ color: theme.text.dim }}> (Enter to send, Esc to cancel)</text>
     </box>
   );
 };

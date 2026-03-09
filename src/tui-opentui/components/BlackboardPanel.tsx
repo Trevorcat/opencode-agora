@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { theme } from '../theme.js';
 
 export type BlackboardItemType = 'consensus' | 'checkpoint' | 'note' | 'guidance';
 
@@ -16,19 +17,19 @@ export type BlackboardPanelProps = {
 
 const getTypeColor = (type: string): string => {
   switch (type) {
-    case 'consensus': return '#9ece6a';
-    case 'checkpoint': return '#7aa2f7';
-    case 'note': return '#e0af68';
-    case 'guidance': return '#bb9af7';
-    default: return '#a9b1d6';
+    case 'consensus': return theme.accent.green;
+    case 'checkpoint': return theme.accent.blue;
+    case 'note': return theme.accent.yellow;
+    case 'guidance': return theme.accent.mauve;
+    default: return theme.text.muted;
   }
 };
 
 const getTypeIcon = (type: string): string => {
   switch (type) {
-    case 'consensus': return '✓';
-    case 'checkpoint': return '◆';
-    case 'note': return '◈';
+    case 'consensus': return '✅';
+    case 'checkpoint': return '📌';
+    case 'note': return '📝';
     case 'guidance': return '⚡';
     default: return '▪';
   }
@@ -42,21 +43,21 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
     <box 
       style={{ 
         borderStyle: 'rounded', 
-        borderColor: '#e0af68',
+        borderColor: theme.accent.yellow,
         width: '100%',
         height: '100%',
         flexDirection: 'column',
       }}
     >
       <box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 1, paddingRight: 1 }}>
-        <text style={{ bold: true, color: '#ffffff' }}>BLACKBOARD [{items.length}]</text>
-        <text style={{ color: '#565f89' }}>(Click to expand)</text>
+        <text style={{ bold: true, color: theme.text.primary }}>BLACKBOARD [{items.length}]</text>
+        <text style={{ color: theme.text.dim }}>(Click to expand)</text>
       </box>
 
       {visibleItems.length === 0 ? (
         <box style={{ paddingLeft: 1, paddingTop: 1, flexDirection: 'column' }}>
-          <text style={{ italic: true, color: '#565f89' }}>No artifacts pinned yet...</text>
-          <text style={{ color: '#565f89' }}>Use forum.pin_to_blackboard</text>
+          <text style={{ italic: true, color: theme.text.dim }}>No artifacts pinned yet...</text>
+          <text style={{ color: theme.text.dim }}>Use forum.pin_to_blackboard</text>
         </box>
       ) : (
         <scrollbox
@@ -92,19 +93,19 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
                     {getTypeIcon(item.type)} {item.type.toUpperCase()}{isExpanded ? ' [EXPANDED]' : ''}
                   </text>
                   {item.author && (
-                    <text style={{ color: '#565f89' }}>
+                    <text style={{ color: theme.text.dim }}>
                       by {item.author.substring(0, 10)}{item.author.length > 10 ? '...' : ''}
                     </text>
                   )}
                 </box>
                 
                 <box style={{ paddingLeft: 1, marginTop: 1 }}>
-                  <text style={{ color: '#c0caf5' }}>{content}</text>
+                  <text style={{ color: theme.text.primary }}>{content}</text>
                 </box>
                 
                 {item.timestamp && (
                   <box style={{ marginTop: 1 }}>
-                    <text style={{ color: '#565f89' }}>
+                    <text style={{ color: theme.text.dim }}>
                       {new Date(item.timestamp).toLocaleTimeString()}
                     </text>
                   </box>

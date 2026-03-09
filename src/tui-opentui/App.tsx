@@ -19,6 +19,7 @@ import { StatusBar } from './components/StatusBar.js';
 import { GuidanceInput } from './components/GuidanceInput.js';
 import { TopicManager } from './components/TopicManager.js';
 import { resolvePreset } from '../config/presets.js';
+import { theme } from './theme.js';
 
 export type AppMode = 
   | { kind: 'picker' }
@@ -205,9 +206,9 @@ export const App: React.FC<AppProps> = ({
   if (error) {
     return (
       <box style={{ flexDirection: 'column', padding: 2 }}>
-        <text style={{ color: '#ff6c6b', bold: true }}>Error loading debate status:</text>
-        <text style={{ color: '#ff6c6b' }}>{error}</text>
-        <text style={{ color: '#565f89' }}>Press 'q' to quit</text>
+        <text style={{ color: theme.accent.red, bold: true }}>Error loading debate status:</text>
+        <text style={{ color: theme.accent.red }}>{error}</text>
+        <text style={{ color: theme.text.dim }}>Press 'q' to quit</text>
       </box>
     );
   }
@@ -215,8 +216,8 @@ export const App: React.FC<AppProps> = ({
   if (!liveStatus) {
     return (
       <box style={{ flexDirection: 'column', padding: 2, justifyContent: 'center', alignItems: 'center' }}>
-        <text style={{ color: '#7aa2f7' }}>Loading debate data...</text>
-        <text style={{ color: '#565f89' }}>Topic: {topicId}</text>
+        <text style={{ color: theme.accent.blue }}>Loading debate data...</text>
+        <text style={{ color: theme.text.dim }}>Topic: {topicId}</text>
       </box>
     );
   }
@@ -231,7 +232,6 @@ export const App: React.FC<AppProps> = ({
         {/* Header - fixed 3 rows */}
       <Header
         question={liveStatus.topic_id}
-        // @ts-expect-error - Header type needs to be updated to support 'failed'
         status={liveStatus.status === 'paused' ? 'paused' : liveStatus.status === 'completed' ? 'completed' : liveStatus.status === 'failed' ? 'failed' : 'running'}
         topicId={topicId}
         round={liveStatus.current_round}
@@ -307,18 +307,18 @@ export const App: React.FC<AppProps> = ({
             marginLeft: -20,
             marginTop: -2,
             borderStyle: 'double',
-            borderColor: liveStatus.status === 'completed' ? '#7aa2f7' : '#f7768e',
-            backgroundColor: '#1a1b26',
+            borderColor: liveStatus.status === 'completed' ? theme.accent.blue : theme.accent.red,
+            backgroundColor: theme.bg.primary,
             justifyContent: 'center',
             alignItems: 'center',
             flexDirection: 'column',
             padding: 1
           }}
         >
-          <text style={{ bold: true, color: liveStatus.status === 'completed' ? '#7aa2f7' : '#f7768e' }}>
-            {liveStatus.status === 'completed' ? '✓ DEBATE COMPLETED' : '✗ DEBATE FAILED'}
+          <text style={{ bold: true, color: liveStatus.status === 'completed' ? theme.accent.blue : theme.accent.red }}>
+            {liveStatus.status === 'completed' ? '✅ DEBATE COMPLETED' : '❌ DEBATE FAILED'}
           </text>
-          <text style={{ color: '#565f89', marginTop: 1 }}>Esc / Q to dismiss · Q again to quit</text>
+          <text style={{ color: theme.text.dim, marginTop: 1 }}>Esc / Q to dismiss · Q again to quit</text>
         </box>
       )}
     </box>

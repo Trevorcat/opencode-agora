@@ -1,8 +1,9 @@
 import React from 'react';
+import { theme } from '../theme.js';
 
 export type HeaderProps = {
   question: string;
-  status: 'running' | 'paused' | 'completed';
+  status: 'running' | 'paused' | 'completed' | 'failed';
   topicId: string;
   round: number;
   totalRounds: number;
@@ -19,10 +20,11 @@ export const Header: React.FC<HeaderProps> = ({
 
   const getStatusColor = () => {
     switch (status) {
-      case 'running': return '#9ece6a';
-      case 'paused': return '#e0af68';
-      case 'completed': return '#7aa2f7';
-      default: return '#a9b1d6';
+      case 'running': return theme.accent.green;
+      case 'paused': return theme.accent.yellow;
+      case 'completed': return theme.accent.blue;
+      case 'failed': return theme.accent.red;
+      default: return theme.text.muted;
     }
   };
 
@@ -30,7 +32,8 @@ export const Header: React.FC<HeaderProps> = ({
     switch (status) {
       case 'running': return '● RUNNING';
       case 'paused': return '⏸ PAUSED';
-      case 'completed': return '✓ COMPLETED';
+      case 'completed': return '✅ COMPLETED';
+      case 'failed': return '❌ FAILED';
       default: return '○ UNKNOWN';
     }
   };
@@ -39,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
     <box 
       style={{ 
         borderStyle: 'rounded', 
-        borderColor: '#7aa2f7',
+        borderColor: theme.accent.blue,
         width: '100%',
         height: 3,
         flexDirection: 'row',
@@ -49,8 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
         paddingRight: 1,
       }}
     >
-      <text style={{ bold: true, color: '#bb9af7' }}>AGORÁ // {topicId.toUpperCase()}</text>
-      <text style={{ italic: true, color: '#a9b1d6' }}>{truncatedQuestion}</text>
+      <text style={{ bold: true, color: theme.accent.mauve }}>AGORÁ // {topicId.toUpperCase()}</text>
+      <text style={{ italic: true, color: theme.text.muted }}>{truncatedQuestion}</text>
       <text>Round {round}/{totalRounds}</text>
       <text style={{ bold: true, color: getStatusColor() }}>{getStatusText()}</text>
     </box>

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useKeyboard } from '@opentui/react';
 import type { BlackboardStore } from '../../blackboard/store.js';
 import type { AvailableModel } from '../../config/opencode-loader.js';
+import { theme, getAgentColor } from '../theme.js';
 
 export type AgentStatus = "waiting" | "thinking" | "posted" | "error";
 
@@ -25,38 +26,23 @@ export type AgentPanelProps = {
   isPreparingRound?: boolean;
 };
 
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-const PULSE_FRAMES = ['●○○○', '○●○○', '○○●○', '○○○●'];
-
-const getAgentColor = (role: string): string => {
-  const colors: Record<string, string> = {
-    researcher: '#7aa2f7',
-    optimist: '#9ece6a',
-    pessimist: '#f7768e',
-    ethicist: '#e0af68',
-    moderator: '#bb9af7',
-    default: '#a9b1d6',
-  };
-  return colors[role.toLowerCase()] || colors.default;
-};
-
 const getStatusIcon = (status: AgentStatus, frame: number = 0): string => {
   switch (status) {
-    case 'thinking': return SPINNER_FRAMES[frame];
-    case 'posted': return '✓';
-    case 'error': return '✗';
+    case 'thinking': return theme.status.thinkingFrames[frame];
+    case 'posted': return theme.status.posted;
+    case 'error': return theme.status.error;
     case 'waiting':
-    default: return '○';
+    default: return theme.status.waiting;
   }
 };
 
 const getStatusColor = (status: AgentStatus): string => {
   switch (status) {
-    case 'thinking': return '#e0af68';
-    case 'posted': return '#9ece6a';
-    case 'error': return '#f7768e';
+    case 'thinking': return theme.accent.yellow;
+    case 'posted': return theme.accent.green;
+    case 'error': return theme.accent.red;
     case 'waiting':
-    default: return '#565f89';
+    default: return theme.text.dim;
   }
 };
 
@@ -112,20 +98,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     <box 
       style={{ 
         borderStyle: 'single', 
-        borderColor: '#7aa2f7',
+        borderColor: theme.accent.blue,
         width: '100%',
         flexDirection: 'column',
       }}
     >
-      <text style={{ bold: true, color: '#ffffff' }}> AGENTS</text>
+      <text style={{ bold: true, color: theme.text.primary }}> AGENTS</text>
       
       {agents.map((agent, index) => {
         const roleColor = getAgentColor(agent.role);
         const isPreparingThis = isPreparingRound && agent.status === 'posted';
         const statusIcon = isPreparingThis
-          ? PULSE_FRAMES[pulseFrame]
+          ? theme.status.preparingFrames[pulseFrame]
           : getStatusIcon(agent.status, frame);
-        const statusColor = isPreparingThis ? '#bb9af7' : getStatusColor(agent.status);
+        const statusColor = isPreparingThis ? theme.accent.mauve : getStatusColor(agent.status);
         const statusLabel = isPreparingThis ? 'PREPARING' : agent.status.toUpperCase();
         const isExpanded = expandedRole === agent.role;
         
@@ -144,19 +130,19 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             >
               <text style={{ bold: true, color: roleColor }}>{' ['}{agent.role.toUpperCase()}{'] ▼'}</text>
               <text style={{ color: statusColor }}>{' '}{statusIcon}{' '}{statusLabel}</text>
-              <text style={{ color: '#565f89' }}>{' Model: '}{agent.model}</text>
+              <text style={{ color: theme.text.dim }}>{' Model: '}{agent.model}</text>
               
               {/* Persona (full in expanded view) */}
               {agent.persona && (
                 <box style={{ paddingLeft: 1, marginTop: 1 }}>
-                  <text style={{ color: '#a9b1d6', italic: true }}>{agent.persona.substring(0, 200)}</text>
+                  <text style={{ color: theme.text.muted, italic: true }}>{agent.persona.substring(0, 200)}</text>
                 </box>
               )}
 
               {/* Model selector */}
               {availableModels && availableModels.length > 0 && (
                 <box style={{ marginTop: 1, height: Math.min(availableModels.length + 1, 6) }}>
-                  <text style={{ color: '#e0af68', bold: true }}> Switch model:</text>
+                  <text style={{ color: theme.accent.yellow, bold: true }}> Switch model:</text>
                   <select
                     options={availableModels.map(m => ({
                       name: m.name,
@@ -168,10 +154,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                     showDescription={true}
                     showScrollIndicator={true}
                     style={{
-                      selectedBackgroundColor: '#3b4261',
-                      selectedTextColor: '#7aa2f7',
-                      textColor: '#a9b1d6',
-                      backgroundColor: '#1a1b26',
+                      selectedBackgroundColor: theme.bg.highlight,
+                      selectedTextColor: theme.accent.blue,
+                      textColor: theme.text.muted,
+                      backgroundColor: theme.bg.primary,
                     }}
                     // @ts-ignore OpenTUI select event
                     onSelect={(_idx: number, option: any) => {
@@ -185,7 +171,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
               {/* Streaming text */}
               {agent.streaming_text && (
-                <text style={{ color: '#565f89' }}>{' '}{agent.streaming_text.substring(0, 40)}</text>
+                <text style={{ color: theme.text.dim }}>{' '}{agent.streaming_text.substring(0, 40)}</text>
               )}
             </box>
           );
@@ -204,10 +190,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             onMouseDown={() => setExpandedRole(expandedRole === agent.role ? null : agent.role)}
           >
             <text style={{ bold: true, color: roleColor }}>{' ['}{agent.role.toUpperCase()}{']'}</text>
-            <text style={{ color: '#565f89' }}>{' '}{agent.model}</text>
+            <text style={{ color: theme.text.dim }}>{' '}{agent.model}</text>
             <text style={{ color: statusColor }}>{' '}{statusIcon}{' '}{statusLabel}</text>
             {agent.streaming_text && (
-              <text style={{ color: '#565f89' }}>{' '}{agent.streaming_text.substring(0, 40)}</text>
+              <text style={{ color: theme.text.dim }}>{' '}{agent.streaming_text.substring(0, 40)}</text>
             )}
           </box>
         );
