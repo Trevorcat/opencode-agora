@@ -45,40 +45,40 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         paddingRight: 1,
       }}
     >
-      <text style={{ color: theme.accent.blue }}>Progress: Round {round}/{totalRounds}</text>
+      <text style={{ fg: theme.accent.blue }}>Progress: Round {round}/{totalRounds}</text>
 
       {latestEvent && (
-        <text style={{ color: theme.text.dim }}>
+        <text style={{ fg: theme.text.dim }}>
           {latestEvent.length > 40 ? latestEvent.substring(0, 37) + '...' : latestEvent}
         </text>
       )}
       
       {pendingGuidance > 0 && (
-        <text style={{ backgroundColor: theme.accent.mauve, color: theme.bg.primary, bold: true }}>
+        <text style={{ backgroundColor: theme.accent.mauve, fg: theme.bg.primary, bold: true }}>
           {' '}{pendingGuidance} GUIDANCE{' '}
         </text>
       )}
       
-      <text style={{ bold: true, color: statusColor }}>
+      <text style={{ bold: true, fg: statusColor }}>
         {statusText}
       </text>
       
       <box style={{ flexDirection: 'row' }}>
-        <text style={{ color: theme.text.dim }}>[</text>
-        <text style={{ bold: true, color: theme.text.primary }}>Tab</text>
-        <text style={{ color: theme.text.dim }}>] expand agent </text>
-        <text style={{ color: theme.text.dim }}>[</text>
-        <text style={{ bold: true, color: theme.text.primary }}>p</text>
-        <text style={{ color: theme.text.dim }}>]ause </text>
-        <text style={{ color: theme.text.dim }}>[</text>
-        <text style={{ bold: true, color: theme.text.primary }}>r</text>
-        <text style={{ color: theme.text.dim }}>]esume </text>
-        <text style={{ color: theme.text.dim }}>[</text>
-        <text style={{ bold: true, color: theme.text.primary }}>g</text>
-        <text style={{ color: theme.text.dim }}>]uidance </text>
-        <text style={{ color: theme.text.dim }}>[</text>
-        <text style={{ bold: true, color: theme.text.primary }}>q</text>
-        <text style={{ color: theme.text.dim }}>]uit |🖱 Scroll</text>
+        <text style={{ fg: theme.text.dim }}>[</text>
+        <text style={{ bold: false, fg: theme.text.secondary }}>Tab</text>
+        <text style={{ fg: theme.text.dim }}>] expand agent </text>
+        <text style={{ fg: theme.text.dim }}>[</text>
+        <text style={{ bold: false, fg: theme.text.secondary }}>p</text>
+        <text style={{ fg: theme.text.dim }}>]ause </text>
+        <text style={{ fg: theme.text.dim }}>[</text>
+        <text style={{ bold: false, fg: theme.text.secondary }}>r</text>
+        <text style={{ fg: theme.text.dim }}>]esume </text>
+        <text style={{ fg: theme.text.dim }}>[</text>
+        <text style={{ bold: false, fg: theme.text.secondary }}>g</text>
+        <text style={{ fg: theme.text.dim }}>]uidance </text>
+        <text style={{ fg: theme.text.dim }}>[</text>
+        <text style={{ bold: false, fg: theme.text.secondary }}>q</text>
+        <text style={{ fg: theme.text.dim }}>]uit |🖱 Scroll</text>
       </box>
     </box>
   );

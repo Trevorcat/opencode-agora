@@ -114,31 +114,31 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
   return (
     <box style={{ flexDirection: "column", padding: 2, width: "100%", height: "100%" }}>
-      <text style={{ bold: true, color: theme.accent.blue, marginBottom: 1 }}>
+      <text style={{ bold: true, fg: theme.accent.blue, marginBottom: 1 }}>
         ⬡ AGORA — Multi-Agent Debate Launcher
       </text>
 
       {phase === "home" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: theme.text.primary, marginBottom: 1 }}>Select an action:</text>
-          <text style={{ color: theme.accent.yellow }}>[E] Enter existing topic</text>
-          <text style={{ color: theme.accent.green }}>[N] Create new topic</text>
-          <text style={{ color: theme.accent.red }}>[Q] Quit</text>
+          <text style={{ fg: theme.text.primary, marginBottom: 1 }}>Select an action:</text>
+          <text style={{ fg: theme.accent.yellow }}>[E] Enter existing topic</text>
+          <text style={{ fg: theme.accent.green }}>[N] Create new topic</text>
+          <text style={{ fg: theme.accent.red }}>[Q] Quit</text>
         </box>
       )}
 
       {phase === "existing_topics" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: theme.text.primary, marginBottom: 1 }}>Select an existing topic:</text>
+          <text style={{ fg: theme.text.primary, marginBottom: 1 }}>Select an existing topic:</text>
           {existingTopics.length === 0 ? (
-            <text style={{ color: theme.text.dim }}>No existing topics found.</text>
+            <text style={{ fg: theme.text.dim }}>No existing topics found.</text>
           ) : (
             existingTopics.map((t, i) => (
               <box key={t} style={{ flexDirection: "row" }}>
-                <text style={{ color: i === selectedTopicIdx ? theme.accent.blue : theme.text.dim, width: 2 }}>
+                <text style={{ fg: i === selectedTopicIdx ? theme.accent.blue : theme.text.dim, width: 2 }}>
                   {i === selectedTopicIdx ? "▶" : " "}
                 </text>
-                <text style={{ color: i === selectedTopicIdx ? theme.accent.yellow : theme.text.primary }}>
+                <text style={{ fg: i === selectedTopicIdx ? theme.accent.yellow : theme.text.primary }}>
                   {t}
                 </text>
               </box>
@@ -146,13 +146,13 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
           )}
           {showDeleteConfirm && (
             <box style={{ flexDirection: "column", marginTop: 1, borderStyle: "single", borderColor: theme.accent.red, padding: 1 }}>
-              <text style={{ color: theme.accent.red, bold: true }}>
+              <text style={{ fg: theme.accent.red, bold: true }}>
                 Delete topic "{existingTopics[selectedTopicIdx]}"?
               </text>
-              <text style={{ color: theme.text.primary }}>[Y]es / [N]o</text>
+              <text style={{ fg: theme.text.primary }}>[Y]es / [N]o</text>
             </box>
           )}
-          <text style={{ color: theme.text.dim, marginTop: 1 }}>
+          <text style={{ fg: theme.text.dim, marginTop: 1 }}>
             ↑↓ navigate · Enter to resume · [D] delete · Esc to go back
           </text>
         </box>
@@ -160,7 +160,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
       {phase === "new_topic" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: theme.text.primary }}>Enter debate topic or question:</text>
+          <text style={{ fg: theme.text.primary }}>Enter debate topic or question:</text>
           <box
             style={{
               borderStyle: "single",
@@ -170,12 +170,12 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
               width: "80%",
             }}
           >
-            <text style={{ color: theme.accent.yellow }}>
+            <text style={{ fg: theme.accent.yellow }}>
               {topic}
-              <text style={{ color: theme.accent.blue }}>█</text>
+              <text style={{ fg: theme.accent.blue }}>█</text>
             </text>
           </box>
-          <text style={{ color: theme.text.dim, marginTop: 1 }}>
+          <text style={{ fg: theme.text.dim, marginTop: 1 }}>
             Press Enter to continue · Esc to go back · Ctrl+C to quit
           </text>
         </box>
@@ -183,13 +183,13 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
       {phase === "preset" && (
         <box style={{ flexDirection: "column" }}>
-          <text style={{ color: theme.accent.green, marginBottom: 1 }}>Topic: {topic}</text>
-          <text style={{ color: theme.text.primary, marginBottom: 1 }}>Select debate format:</text>
+          <text style={{ fg: theme.accent.green, marginBottom: 1 }}>Topic: {topic}</text>
+          <text style={{ fg: theme.text.primary, marginBottom: 1 }}>Select debate format:</text>
           {presets.map((p, i) => (
             <box key={p.id} style={{ flexDirection: "row", marginBottom: 0 }}>
               <text
                 style={{
-                  color: i === selectedPresetIdx ? theme.accent.blue : theme.text.dim,
+                  fg: i === selectedPresetIdx ? theme.accent.blue : theme.text.dim,
                   width: 2,
                 }}
               >
@@ -198,17 +198,17 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
               <box style={{ flexDirection: "column", marginLeft: 1 }}>
                 <text
                   style={{
-                    color: i === selectedPresetIdx ? theme.accent.yellow : theme.text.primary,
+                    fg: i === selectedPresetIdx ? theme.accent.yellow : theme.text.primary,
                     bold: i === selectedPresetIdx,
                   }}
                 >
                   {p.id.padEnd(14)} — {p.name} ({p.agent_count} agents)
                 </text>
-                <text style={{ color: theme.text.dim }}>  {p.description}</text>
+                <text style={{ fg: theme.text.dim }}>  {p.description}</text>
               </box>
             </box>
           ))}
-          <text style={{ color: theme.text.dim, marginTop: 1 }}>
+          <text style={{ fg: theme.text.dim, marginTop: 1 }}>
             ↑↓ navigate · Enter to start · Esc to go back
           </text>
         </box>

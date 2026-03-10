@@ -27,7 +27,7 @@ export const GuidanceInput: React.FC<GuidanceInputProps> = ({
         paddingRight: 1,
       }}
     >
-      <text style={{ bold: true, color: theme.accent.yellow }}>⚡ INJECT GUIDANCE ➔ </text>
+      <text style={{ bold: true, fg: theme.accent.yellow }}>⚡ INJECT GUIDANCE ➔ </text>
       <input
         value={value}
         onInput={onChange}
@@ -36,7 +36,7 @@ export const GuidanceInput: React.FC<GuidanceInputProps> = ({
         style={{ flexGrow: 1 }}
         focused={true}
       />
-      <text style={{ color: theme.text.dim }}> (Enter to send, Esc to cancel)</text>
+      <text style={{ fg: theme.text.dim }}> (Enter to send, Esc to cancel)</text>
     </box>
   );
 };

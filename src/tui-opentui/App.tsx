@@ -206,9 +206,9 @@ export const App: React.FC<AppProps> = ({
   if (error) {
     return (
       <box style={{ flexDirection: 'column', padding: 2 }}>
-        <text style={{ color: theme.accent.red, bold: true }}>Error loading debate status:</text>
-        <text style={{ color: theme.accent.red }}>{error}</text>
-        <text style={{ color: theme.text.dim }}>Press 'q' to quit</text>
+        <text style={{ fg: theme.accent.red, bold: true }}>Error loading debate status:</text>
+        <text style={{ fg: theme.accent.red }}>{error}</text>
+        <text style={{ fg: theme.text.dim }}>Press 'q' to quit</text>
       </box>
     );
   }
@@ -216,8 +216,8 @@ export const App: React.FC<AppProps> = ({
   if (!liveStatus) {
     return (
       <box style={{ flexDirection: 'column', padding: 2, justifyContent: 'center', alignItems: 'center' }}>
-        <text style={{ color: theme.accent.blue }}>Loading debate data...</text>
-        <text style={{ color: theme.text.dim }}>Topic: {topicId}</text>
+        <text style={{ fg: theme.accent.blue }}>Loading debate data...</text>
+        <text style={{ fg: theme.text.dim }}>Topic: {topicId}</text>
       </box>
     );
   }
@@ -315,10 +315,10 @@ export const App: React.FC<AppProps> = ({
             padding: 1
           }}
         >
-          <text style={{ bold: true, color: liveStatus.status === 'completed' ? theme.accent.blue : theme.accent.red }}>
+          <text style={{ bold: true, fg: liveStatus.status === 'completed' ? theme.accent.blue : theme.accent.red }}>
             {liveStatus.status === 'completed' ? '✅ DEBATE COMPLETED' : '❌ DEBATE FAILED'}
           </text>
-          <text style={{ color: theme.text.dim, marginTop: 1 }}>Esc / Q to dismiss · Q again to quit</text>
+          <text style={{ fg: theme.text.dim, marginTop: 1 }}>Esc / Q to dismiss · Q again to quit</text>
         </box>
       )}
     </box>

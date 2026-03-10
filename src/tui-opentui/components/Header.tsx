@@ -52,10 +52,10 @@ export const Header: React.FC<HeaderProps> = ({
         paddingRight: 1,
       }}
     >
-      <text style={{ bold: true, color: theme.accent.mauve }}>AGORÁ // {topicId.toUpperCase()}</text>
-      <text style={{ italic: true, color: theme.text.muted }}>{truncatedQuestion}</text>
+      <text style={{ bold: true, fg: theme.accent.mauve }}>AGORÁ // {topicId.toUpperCase()}</text>
+      <text style={{ italic: true, fg: theme.text.muted }}>{truncatedQuestion}</text>
       <text>Round {round}/{totalRounds}</text>
-      <text style={{ bold: true, color: getStatusColor() }}>{getStatusText()}</text>
+      <text style={{ bold: true, fg: getStatusColor() }}>{getStatusText()}</text>
     </box>
   );
 };

@@ -50,14 +50,14 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
       }}
     >
       <box style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 1, paddingRight: 1 }}>
-        <text style={{ bold: true, color: theme.text.primary }}>BLACKBOARD [{items.length}]</text>
-        <text style={{ color: theme.text.dim }}>(Click to expand)</text>
+        <text style={{ bold: false, fg: theme.text.primary }}>BLACKBOARD [{items.length}]</text>
+        <text style={{ fg: theme.text.dim }}>(Click to expand)</text>
       </box>
 
       {visibleItems.length === 0 ? (
         <box style={{ paddingLeft: 1, paddingTop: 1, flexDirection: 'column' }}>
-          <text style={{ italic: true, color: theme.text.dim }}>No artifacts pinned yet...</text>
-          <text style={{ color: theme.text.dim }}>Use forum.pin_to_blackboard</text>
+          <text style={{ italic: true, fg: theme.text.dim }}>No artifacts pinned yet...</text>
+          <text style={{ fg: theme.text.dim }}>Use forum.pin_to_blackboard</text>
         </box>
       ) : (
         <scrollbox
@@ -89,23 +89,23 @@ export const BlackboardPanel: React.FC<BlackboardPanelProps> = ({ items }) => {
                 onMouseDown={() => setExpandedItemId(isExpanded ? null : item.id)}
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <text style={{ color: typeColor }}>
+                  <text style={{ fg: typeColor }}>
                     {getTypeIcon(item.type)} {item.type.toUpperCase()}{isExpanded ? ' [EXPANDED]' : ''}
                   </text>
                   {item.author && (
-                    <text style={{ color: theme.text.dim }}>
+                    <text style={{ fg: theme.text.dim }}>
                       by {item.author.substring(0, 10)}{item.author.length > 10 ? '...' : ''}
                     </text>
                   )}
                 </box>
                 
                 <box style={{ paddingLeft: 1, marginTop: 1 }}>
-                  <text style={{ color: theme.text.primary }}>{content}</text>
+                  <text style={{ fg: theme.text.primary }}>{content}</text>
                 </box>
                 
                 {item.timestamp && (
                   <box style={{ marginTop: 1 }}>
-                    <text style={{ color: theme.text.dim }}>
+                    <text style={{ fg: theme.text.dim }}>
                       {new Date(item.timestamp).toLocaleTimeString()}
                     </text>
                   </box>

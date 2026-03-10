@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Post } from '../../blackboard/types.js';
-import { theme, getAgentColor } from '../theme.js';
+import { theme, getAgentColor, getAgentSymbol } from '../theme.js';
 
 export type ThinkingAgent = {
   role: string;
@@ -62,7 +62,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
         flexDirection: 'column',
       }}
     >
-      <text style={{ bold: true, color: theme.text.primary }}> THE FORUM (Scroll/Click to expand)</text>
+      <text style={{ bold: false, fg: theme.text.primary }}> THE FORUM (Scroll/Click to expand)</text>
 
       {posts.length === 0 && thinkingAgents.length === 0 ? (
         <box 
@@ -71,7 +71,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
             paddingTop: 1,
           }}
         >
-          <text style={{ italic: true, color: theme.text.dim }}>Waiting for transmissions...</text>
+          <text style={{ italic: true, fg: theme.text.dim }}>Waiting for transmissions...</text>
         </box>
       ) : (
         <scrollbox
@@ -90,10 +90,10 @@ export const PostFeed: React.FC<PostFeedProps> = ({
                   key={`sep-${item.fromRound}-${item.toRound}`}
                   style={{ marginBottom: 1, flexDirection: 'column' }}
                 >
-                  <text style={{ color: theme.text.dim }}>{'═'.repeat(36)}</text>
-                  <text style={{ bold: true, color: theme.accent.blue }}>{'  ✦ ROUND '}{item.fromRound}{' COMPLETE → ROUND '}{item.toRound}{'  '}</text>
-                  <text style={{ color: theme.text.dim, italic: true }}>{'  Agents preparing next arguments...  '}</text>
-                  <text style={{ color: theme.text.dim }}>{'═'.repeat(36)}</text>
+                  <text style={{ fg: theme.text.dim }}>{'═'.repeat(36)}</text>
+                  <text style={{ bold: true, fg: theme.accent.blue }}>{'  ✦ ROUND '}{item.fromRound}{' COMPLETE → ROUND '}{item.toRound}{'  '}</text>
+                  <text style={{ fg: theme.text.dim, italic: true }}>{'  Agents preparing next arguments...  '}</text>
+                  <text style={{ fg: theme.text.dim }}>{'═'.repeat(36)}</text>
                 </box>
               );
             }
@@ -104,6 +104,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
             const postId = `${post.role}-${globalIdx}`;
             const isExpanded = expandedPostId === postId;
             const roleColor = getAgentColor(post.role);
+            const roleSymbol = getAgentSymbol(post.role);
             
             const borderStyle = isExpanded || isLatest ? 'double' : 'single';
             const borderColor = isSelected ? theme.text.primary : roleColor;
@@ -125,14 +126,14 @@ export const PostFeed: React.FC<PostFeedProps> = ({
                 onMouseDown={() => onPostClick?.(postId)}
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <text style={{ bold: true, color: roleColor }}>
-                    {'['}{post.role.toUpperCase()}{']'}{isSelected ? ' ★' : ''}{isExpanded ? ' [EXPANDED]' : ''}
+                  <text style={{ bold: true, fg: roleColor }}>
+                    {roleSymbol}{' ['}{post.role.toUpperCase()}{']'}{isSelected ? ' ★' : ''}{isExpanded ? ' [EXPANDED]' : ''}
                   </text>
-                  <text style={{ color: theme.text.dim }}>{'Round '}{post.round}</text>
+                  <text style={{ fg: theme.text.dim }}>{'Round '}{post.round}</text>
                 </box>
                 
                 <box style={{ paddingLeft: 1, marginTop: 1 }}>
-                  <text style={{ color: theme.text.primary }}>{content}</text>
+                  <text style={{ fg: theme.text.primary }}>{content}</text>
                 </box>
               </box>
             );
@@ -141,6 +142,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
           {/* Currently thinking/streaming agents */}
           {thinkingAgents.map((agent) => {
             const roleColor = getAgentColor(agent.role);
+            const roleSymbol = getAgentSymbol(agent.role);
             const spinner = theme.status.thinkingFrames[spinnerFrame];
             const streamPreview = agent.streaming_text
               ? agent.streaming_text.substring(agent.streaming_text.length - 80).replace(/\n/g, ' ')
@@ -158,19 +160,19 @@ export const PostFeed: React.FC<PostFeedProps> = ({
                 }}
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <text style={{ bold: true, color: roleColor }}>
-                    {spinner} [{agent.role.toUpperCase()}] THINKING...
+                  <text style={{ bold: true, fg: roleColor }}>
+                    {spinner} {roleSymbol} [{agent.role.toUpperCase()}] THINKING...
                   </text>
-                  <text style={{ color: theme.accent.yellow }}>{spinner}</text>
+                  <text style={{ fg: theme.accent.yellow }}>{spinner}</text>
                 </box>
 
                 {streamPreview ? (
                   <box style={{ paddingLeft: 1, marginTop: 1 }}>
-                    <text style={{ color: theme.text.dim, italic: true }}>{streamPreview}</text>
+                    <text style={{ fg: theme.text.dim, italic: true }}>{streamPreview}</text>
                   </box>
                 ) : (
                   <box style={{ paddingLeft: 1, marginTop: 1 }}>
-                    <text style={{ color: theme.text.dim, italic: true }}>{spinner} Generating response...</text>
+                    <text style={{ fg: theme.text.dim, italic: true }}>{spinner} Generating response...</text>
                   </box>
                 )}
               </box>
