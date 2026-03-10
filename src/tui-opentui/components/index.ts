@@ -4,3 +4,6 @@ export { PostFeed } from './PostFeed.js';
 export { BlackboardPanel } from './BlackboardPanel.js';
 export { StatusBar } from './StatusBar.js';
 export { GuidanceInput } from './GuidanceInput.js';
+export { TopicManager } from './TopicManager.js';
+export { TopicWizard } from './TopicWizard.js';
+export { SubagentCard } from './SubagentCard.js';

@@ -65,6 +65,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       
       <box style={{ flexDirection: 'row' }}>
         <text style={{ fg: theme.text.dim }}>[</text>
+        <text style={{ bold: false, fg: theme.text.secondary }}>F2</text>
+        <text style={{ fg: theme.text.dim }}>] compact </text>
+        <text style={{ fg: theme.text.dim }}>[</text>
+        <text style={{ bold: false, fg: theme.text.secondary }}>Esc</text>
+        <text style={{ fg: theme.text.dim }}>] minimize </text>
+        <text style={{ fg: theme.text.dim }}>[</text>
         <text style={{ bold: false, fg: theme.text.secondary }}>Tab</text>
         <text style={{ fg: theme.text.dim }}>] expand agent </text>
         <text style={{ fg: theme.text.dim }}>[</text>

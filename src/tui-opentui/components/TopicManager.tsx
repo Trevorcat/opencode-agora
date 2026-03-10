@@ -10,6 +10,7 @@ export type TopicManagerProps = {
   store: BlackboardStore;
   onStart: (topic: string, presetId: string) => void;
   onResume: (topicId: string) => void;
+  onWizard?: () => void;
   onCancel?: () => void;
 };
 
@@ -18,6 +19,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
   store,
   onStart,
   onResume,
+  onWizard,
   onCancel,
 }) => {
   const [phase, setPhase] = useState<"home" | "existing_topics" | "new_topic" | "preset">("home");
@@ -47,6 +49,8 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
         setShowDeleteConfirm(false);
       } else if (key.name === "n") {
         setPhase("new_topic");
+      } else if (key.name === "w" && onWizard) {
+        onWizard();
       } else if (key.name === "q") {
         onCancel?.();
         process.exit(0);
@@ -123,6 +127,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
           <text style={{ fg: theme.text.primary, marginBottom: 1 }}>Select an action:</text>
           <text style={{ fg: theme.accent.yellow }}>[E] Enter existing topic</text>
           <text style={{ fg: theme.accent.green }}>[N] Create new topic</text>
+          <text style={{ fg: theme.accent.mauve }}>[W] Wizard: custom agent setup</text>
           <text style={{ fg: theme.accent.red }}>[Q] Quit</text>
         </box>
       )}

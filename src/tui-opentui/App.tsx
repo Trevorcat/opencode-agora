@@ -18,11 +18,25 @@ import { BlackboardPanel } from './components/BlackboardPanel.js';
 import { StatusBar } from './components/StatusBar.js';
 import { GuidanceInput } from './components/GuidanceInput.js';
 import { TopicManager } from './components/TopicManager.js';
+import { TopicWizard } from './components/TopicWizard.js';
+import { SubagentCard } from './components/SubagentCard.js';
 import { resolvePreset } from '../config/presets.js';
 import { theme } from './theme.js';
 
+export type WizardConfig = {
+  question: string;
+  agentCount: number;
+  agents: Array<{
+    role: string;
+    model: string;
+    persona: string;
+  }>;
+};
+
 export type AppMode = 
   | { kind: 'picker' }
+  | { kind: 'wizard' }
+  | { kind: 'launching'; config: WizardConfig }
   | { kind: 'debate'; topicId: string };
 
 export type AppProps = {
@@ -54,6 +68,9 @@ export const App: React.FC<AppProps> = ({
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
   const [overlayDismissed, setOverlayDismissed] = useState(false);
   const [expandedAgentRole, setExpandedAgentRole] = useState<string | null>(null);
+  const [debateCollapsed, setDebateCollapsed] = useState(false);
+  const [backgroundTopics, setBackgroundTopics] = useState<string[]>([]);
+  const [backgroundStatuses, setBackgroundStatuses] = useState<Map<string, LiveStatus | null>>(new Map());
   
   const { width, height } = useTerminalDimensions();
   const renderer = useRenderer();
@@ -91,6 +108,33 @@ export const App: React.FC<AppProps> = ({
     setOverlayDismissed(false);
   }, [liveStatus?.status]);
 
+  // Reset collapsed state when mode changes
+  useEffect(() => {
+    setDebateCollapsed(false);
+  }, [mode.kind]);
+
+  // Poll background topics
+  useEffect(() => {
+    if (backgroundTopics.length === 0) return;
+
+    const poll = async () => {
+      const newStatuses = new Map<string, LiveStatus | null>();
+      for (const bgTopicId of backgroundTopics) {
+        try {
+          const status = await store.getLiveStatus(bgTopicId);
+          newStatuses.set(bgTopicId, status);
+        } catch {
+          newStatuses.set(bgTopicId, null);
+        }
+      }
+      setBackgroundStatuses(newStatuses);
+    };
+
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
+  }, [backgroundTopics, store]);
+
   // Keyboard handling
   useKeyboard((key: { name: string; ctrl?: boolean; shift?: boolean }) => {
     if (mode.kind !== 'debate') return;
@@ -106,7 +150,18 @@ export const App: React.FC<AppProps> = ({
     }
 
     // Normal mode
-    if (key.name === 'q' || (key.ctrl && key.name === 'c')) {
+    if (key.name === 'f2') {
+      setDebateCollapsed(prev => !prev);
+    } else if (key.name === 'escape' && expandedAgentRole) {
+      // Close expanded agent panel first
+      setExpandedAgentRole(null);
+    } else if (key.name === 'escape') {
+      // Minimize to background if debate is still running
+      if (liveStatus && liveStatus.status !== 'completed' && liveStatus.status !== 'failed') {
+        setBackgroundTopics(prev => [...prev.filter(id => id !== topicId), topicId]);
+        setMode({ kind: 'picker' });
+      }
+    } else if (key.name === 'q' || (key.ctrl && key.name === 'c')) {
       const isFinished = liveStatus?.status === 'completed' || liveStatus?.status === 'failed';
       if (isFinished && !overlayDismissed) {
         setOverlayDismissed(true);
@@ -147,13 +202,6 @@ export const App: React.FC<AppProps> = ({
         const postId = `${post.role}-${selectedPostIndex}`;
         setExpandedPostId(expandedPostId === postId ? null : postId);
       }
-    } else if (key.name === 'escape') {
-      const isFinished = liveStatus?.status === 'completed' || liveStatus?.status === 'failed';
-      if (isFinished && !overlayDismissed) {
-        setOverlayDismissed(true);
-      } else if (expandedAgentRole) {
-        setExpandedAgentRole(null);
-      }
     }
   });
 
@@ -174,31 +222,102 @@ export const App: React.FC<AppProps> = ({
   // Show picker mode
   if (mode.kind === 'picker') {
     return (
-      <TopicManager
-        presets={presets}
-        store={store}
-        onStart={(newTopic, presetId) => {
-          const startDebate = async () => {
-            try {
-              const agents = await resolvePreset(agoraDir, presetId);
-              const newTopicId = `topic-${Date.now()}`;
-              controller.runDebateAsync({
-                topicId: newTopicId,
-                question: newTopic,
-                agents,
-              });
-              setMode({ kind: 'debate', topicId: newTopicId });
-            } catch (err) {
-              console.error('Failed to start debate:', err);
-            }
-          };
-          startDebate();
+      <box style={{ width: '100%', height: '100%' }}>
+        <TopicManager
+          presets={presets}
+          store={store}
+          onStart={(newTopic, presetId) => {
+            const startDebate = async () => {
+              try {
+                const agents = await resolvePreset(agoraDir, presetId);
+                const newTopicId = `topic-${Date.now()}`;
+                controller.runDebateAsync({
+                  topicId: newTopicId,
+                  question: newTopic,
+                  agents,
+                });
+                setMode({ kind: 'debate', topicId: newTopicId });
+              } catch (err) {
+                console.error('Failed to start debate:', err);
+              }
+            };
+            startDebate();
+          }}
+          onResume={(resumeTopicId) => {
+            // Remove from background if it was there
+            setBackgroundTopics(prev => prev.filter(id => id !== resumeTopicId));
+            setMode({ kind: 'debate', topicId: resumeTopicId });
+          }}
+          onWizard={() => setMode({ kind: 'wizard' })}
+          onCancel={() => process.exit(0)}
+        />
+
+        {/* Background debate cards */}
+        {backgroundTopics.map((bgTopicId, i) => (
+          <box
+            key={bgTopicId}
+            style={{
+              position: 'absolute',
+              top: 1 + i * 9,
+              right: 1,
+              width: 44,
+            }}
+          >
+            <SubagentCard
+              topicId={bgTopicId}
+              liveStatus={backgroundStatuses.get(bgTopicId) ?? null}
+              floating={false}
+              onExpand={() => {
+                setBackgroundTopics(prev => prev.filter(id => id !== bgTopicId));
+                setMode({ kind: 'debate', topicId: bgTopicId });
+              }}
+            />
+          </box>
+        ))}
+      </box>
+    );
+  }
+
+  // Show wizard mode
+  if (mode.kind === 'wizard') {
+    return (
+      <TopicWizard
+        availableModels={availableModels}
+        agoraDir={agoraDir}
+        onComplete={(config) => {
+          setMode({ kind: 'launching', config });
         }}
-        onResume={(resumeTopicId) => {
-          setMode({ kind: 'debate', topicId: resumeTopicId });
-        }}
-        onCancel={() => process.exit(0)}
+        onCancel={() => setMode({ kind: 'picker' })}
       />
+    );
+  }
+
+  // Show launching state
+  if (mode.kind === 'launching') {
+    return (
+      <box style={{ flexDirection: 'column', padding: 2, justifyContent: 'center', alignItems: 'center' }}>
+        <text style={{ fg: theme.accent.blue, bold: true }}>Starting debate...</text>
+        <text style={{ fg: theme.text.dim }}>Preparing {mode.config.agentCount} agents</text>
+      </box>
+    );
+  }
+
+  // Debate mode - collapsed view
+  if (mode.kind === 'debate' && debateCollapsed) {
+    return (
+      <box style={{ width: '100%', height: '100%' }}>
+        <SubagentCard
+          topicId={topicId}
+          liveStatus={liveStatus}
+          floating={false}
+          onExpand={() => setDebateCollapsed(false)}
+        />
+        <box style={{ padding: 2 }}>
+          <text style={{ fg: theme.text.dim }}>
+            Debate running in background. Press F2 to expand.
+          </text>
+        </box>
+      </box>
     );
   }
 
