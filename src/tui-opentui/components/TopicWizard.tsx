@@ -316,7 +316,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
       {step === "agent_config" && (
         <box style={{ flexDirection: "column" }}>
           <text style={{ fg: theme.text.primary, marginBottom: 1 }}>
-            Agent {currentAgentIdx + 1}/{agentCount} — {configSubstep === "role" ? "Select Role" : "Select Model"}
+            Agent {(currentAgentIdx + 1).toString()}/{agentCount.toString()} — {configSubstep === "role" ? "Select Role" : "Select Model"}
           </text>
 
           {/* Show already-configured agents */}
@@ -379,7 +379,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
         <box style={{ flexDirection: "column" }}>
           <text style={{ fg: theme.text.primary, marginBottom: 1 }}>
             Edit persona for {getAgentSymbol(agents[editingAgentIdx]?.role)}{" "}
-            {agents[editingAgentIdx]?.role} ({editingAgentIdx + 1}/{agentCount})
+            {agents[editingAgentIdx]?.role} ({(editingAgentIdx + 1).toString()}/{agentCount.toString()})
           </text>
           <text style={{ fg: theme.text.dim }}>
             Model: {agents[editingAgentIdx]?.model}
@@ -413,7 +413,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
           </text>
           <text style={{ fg: theme.text.primary }}>Question: {question}</text>
           <text style={{ fg: theme.text.dim, marginTop: 1, marginBottom: 1 }}>
-            Agents ({agentCount}):
+            Agents ({agentCount.toString()}):
           </text>
           {agents.map((a, i) => (
             <box key={i} style={{ flexDirection: "column", marginBottom: 1 }}>
