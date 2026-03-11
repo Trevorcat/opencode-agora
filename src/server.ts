@@ -47,6 +47,47 @@ function generateTopicId(): string {
   return `topic_${date}_${rand}`;
 }
 
+/**
+ * Best-effort: notify the OpenCode TUI via its HTTP API.
+ * Failures are silently ignored — TUI may not be running (e.g. opencode run headless mode).
+ */
+async function notifyTui(
+  opencodeUrl: string,
+  opts: {
+    toast?: { title: string; message: string; variant?: "info" | "success" | "warning" | "error"; duration?: number };
+    appendPrompt?: string;
+  },
+): Promise<void> {
+  try {
+    if (opts.toast) {
+      await fetch(`${opencodeUrl}/tui/show-toast`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: opts.toast.title,
+          message: opts.toast.message,
+          variant: opts.toast.variant ?? "info",
+          duration: opts.toast.duration ?? 5000,
+        }),
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
+    }
+    if (opts.appendPrompt) {
+      await fetch(`${opencodeUrl}/tui/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "tui.prompt.append",
+          properties: { text: opts.appendPrompt },
+        }),
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
+    }
+  } catch {
+    // ignore — TUI is optional
+  }
+}
+
 function toToolResult(data: unknown, isError = false) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -106,99 +147,6 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
       },
     });
   }
-
-  server.tool(
-    "forum.start_debate",
-    "Start a 3-round multi-agent forum debate and synthesize consensus (blocking, returns when complete)",
-    {
-      question: z.string().min(1),
-      context: z.string().optional(),
-      agents: z
-        .array(
-          z.object({
-            role: z.string().min(1),
-            persona: z.string().min(1),
-            model: z.string().min(1),
-          }),
-        )
-        .optional(),
-    },
-    async ({ question, context, agents }) => {
-      const topicId = generateTopicId();
-
-      try {
-        const panel = agents ?? await loadAgentConfig(agoraDir);
-
-        const topic: Topic = {
-          id: topicId,
-          question,
-          ...(context ? { context } : {}),
-          status: "pending",
-          config: {
-            max_rounds: 3,
-            consensus_threshold: 0.66,
-            agents: panel,
-          },
-          created_at: new Date().toISOString(),
-        };
-
-        await store.saveTopic(topic);
-
-        const controller = createController();
-
-        await controller.runDebate({
-          topicId,
-          question,
-          context,
-          agents: panel,
-          enablePause: false,
-          enableGuidance: false,
-        });
-
-        const votes = await store.getVotes(topicId);
-        const allPosts = await Promise.all([1, 2, 3].map((round) => store.getRoundPosts(topicId, round)));
-
-        const synthesizer = new ConsensusSynthesizer({
-          opencodeUrl,
-          directory,
-          moderatorModel,
-        });
-
-        const consensus = await synthesizer.synthesize({
-          topicId,
-          question,
-          votes,
-          allPosts,
-          roundsTaken: 3,
-        });
-
-        await store.saveConsensus(topicId, consensus);
-        await setTopicMetadata(store, topicId, "completed", new Date().toISOString());
-
-        // Pin consensus to blackboard
-        await controller.pinToBlackboard(topicId, consensus.conclusion, "consensus", {
-          metadata: { confidence: consensus.confidence },
-        });
-
-        return toToolResult({
-          topicId,
-          status: "completed",
-          consensus,
-        });
-      } catch (error) {
-        await setTopicMetadata(store, topicId, "failed");
-
-        return toToolResult(
-          {
-            topicId,
-            status: "failed",
-            error: error instanceof Error ? error.message : String(error),
-          },
-          true,
-        );
-      }
-    },
-  );
 
   server.tool(
     "forum.start_debate_async",
@@ -302,6 +250,28 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
                 metadata: { confidence: consensus.confidence },
               });
               console.log(`[Agora] Consensus synthesized for ${topicId}`);
+
+              // Notify OpenCode TUI: toast + append consensus to prompt
+              const confidencePct = Math.round(consensus.confidence * 100);
+              const conclusionSnippet = consensus.conclusion.slice(0, 80);
+              await notifyTui(opencodeUrl, {
+                toast: {
+                  title: "⬡ Agora 辩论完成",
+                  message: `置信度 ${confidencePct}% — ${conclusionSnippet}`,
+                  variant: "success",
+                  duration: 8000,
+                },
+                appendPrompt: [
+                  `\n\n[Agora 辩论完成] topic: ${topicId}`,
+                  `结论：${consensus.conclusion}`,
+                  `置信度：${confidencePct}%`,
+                  consensus.key_arguments.length
+                    ? `主要论点：\n${consensus.key_arguments.map((a) => `- ${a}`).join("\n")}`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              });
             } catch (synthesisError) {
               // Debate itself succeeded; consensus synthesis failed.
               // Mark completed anyway (debate data is intact) but log the synthesis error.

@@ -7,7 +7,7 @@ import { OpenCodeHttpClient } from "./agents/opencode-http-client.js";
 import { logger } from "./utils/logger.js";
 
 /** Default moderator model (fully qualified). Override via AGORA_MODERATOR_MODEL env. */
-const DEFAULT_MODERATOR_MODEL = "lilith/claude-opus-4-6";
+const DEFAULT_MODERATOR_MODEL = "local/Qwen/Qwen3.5-27B-FP8";
 
 async function main() {
   const agoraDir = process.env.AGORA_DIR ?? path.join(process.cwd(), ".agora");

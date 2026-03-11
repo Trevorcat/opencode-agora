@@ -34,10 +34,24 @@ export class ConsensusSynthesizer {
   }
 
   async synthesize(params: SynthesizeParams): Promise<Consensus> {
+    const voteDistribution = this.computeVoteDistribution(params.votes);
+
+    // Try LLM synthesis first; fall back to vote-based synthesis on any failure
+    try {
+      return await this.synthesizeWithLLM(params, voteDistribution);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[consensus] LLM synthesis failed (${msg}), using vote-based fallback`);
+      return this.synthesizeFromVotes(params, voteDistribution);
+    }
+  }
+
+  private async synthesizeWithLLM(
+    params: SynthesizeParams,
+    voteDistribution: Record<string, number>,
+  ): Promise<Consensus> {
     const client = new OpenCodeHttpClient(this.opencodeUrl, this.directory);
     const sessionId = await client.createSession();
-
-    const voteDistribution = this.computeVoteDistribution(params.votes);
     const { providerID, modelID } = this.parseModelId(this.moderatorModel);
 
     let result: unknown;
@@ -49,7 +63,6 @@ export class ConsensusSynthesizer {
         parts: [{ type: "text", text: this.buildUserPrompt(params, voteDistribution) }],
       });
     } finally {
-      // Best-effort cleanup — don't let session leaks accumulate
       void client.deleteSession(sessionId);
     }
 
@@ -65,6 +78,48 @@ export class ConsensusSynthesizer {
       vote_distribution: voteDistribution,
       rounds_taken: params.roundsTaken,
       generated_by: this.moderatorModel,
+    };
+  }
+
+  /**
+   * Fallback: build consensus directly from votes without calling LLM.
+   * Used when the moderator model is unavailable or returns invalid JSON.
+   */
+  private synthesizeFromVotes(
+    params: SynthesizeParams,
+    voteDistribution: Record<string, number>,
+  ): Consensus {
+    // Pick the position with the most votes; tie-break by first occurrence
+    const topPosition =
+      Object.entries(voteDistribution).sort(([, a], [, b]) => b - a)[0]?.[0] ??
+      "No consensus reached";
+
+    const totalVotes = params.votes.length;
+    const topVotes = voteDistribution[topPosition] ?? 0;
+    const confidence = totalVotes > 0 ? topVotes / totalVotes : 0;
+
+    // Collect unique reasoning points from the last round
+    const lastRoundPosts = params.allPosts[params.allPosts.length - 1] ?? [];
+    const key_arguments = lastRoundPosts
+      .flatMap((p) => p.reasoning ?? [])
+      .filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+      .slice(0, 5);
+
+    const dissenting_views = params.votes
+      .filter((v) => v.chosen_position !== topPosition && v.dissent_notes)
+      .map((v) => v.dissent_notes as string)
+      .slice(0, 3);
+
+    return {
+      topic_id: params.topicId,
+      conclusion: topPosition,
+      confidence,
+      key_arguments,
+      dissenting_views,
+      convergence_method: "vote-majority (fallback)",
+      vote_distribution: voteDistribution,
+      rounds_taken: params.roundsTaken,
+      generated_by: "fallback",
     };
   }
 
