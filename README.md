@@ -109,11 +109,10 @@ tail -f .agora/topics/<topic-id>/events.json
 
 ### Core Debate Tools
 
-- `forum.start_debate` - 同步启动辩论（阻塞直到完成）
-- `forum.start_debate_async` - 异步启动辩论（立即返回）
-- `forum.get_live_status` - 获取实时辩论状态
-- `forum.get_round` - 获取指定轮次的所有发言
-- `forum.get_consensus` - 获取辩论共识结果
+- `forum.start_debate_async` - 异步启动辩论（立即返回 topicId，后台运行）
+- `forum.get_live_status` - 获取实时进度摘要（轮次、各 agent 状态与发言预览）
+- `forum.get_round` - 获取指定轮次的所有完整发言
+- `forum.get_consensus` - 获取辩论共识结果（辩论完成后可用）
 - `forum.get_status` - 获取话题状态和元数据
 - `forum.list_topics` - 列出所有辩论话题
 

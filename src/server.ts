@@ -336,7 +336,26 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
         return toToolResult({ topicId, error: "Topic not found" }, true);
       }
 
-      return toToolResult(status);
+      // Return a compact summary suitable for OpenCode TUI display.
+      // Omits full `blackboard` and `recent_posts` arrays to keep response concise.
+      return toToolResult({
+        topic_id: status.topic_id,
+        question: status.question,
+        status: status.status,
+        progress: status.progress,
+        agents: status.agents.map(a => ({
+          role: a.role,
+          model: a.model,
+          status: a.status,
+          last_post_preview: a.last_post_preview,
+          last_post_position: a.last_post_position,
+          streaming_preview: a.streaming_preview,
+        })),
+        pinned_blackboard: status.pinned_blackboard,
+        pending_guidance: status.pending_guidance,
+        latest_event: status.latest_event,
+        hint: status.hint,
+      });
     },
   );
 

@@ -117,6 +117,8 @@ export interface LiveStatus {
   status: DebateStatus | "paused";
   current_round: number;
   total_rounds: number;
+  /** Human-readable progress, e.g. "Round 2/3" (for OpenCode TUI display) */
+  progress: string;
   agents: Array<{
     role: string;
     model: string;
@@ -125,12 +127,22 @@ export interface LiveStatus {
     /** Partial streaming output while agent is thinking */
     streaming_text?: string;
     persona?: string;
+    /** First 100 chars of the agent's latest reasoning (compact summary) */
+    last_post_preview?: string;
+    /** The agent's current position/stance */
+    last_post_position?: string;
+    /** Partial streaming output while agent is thinking (first 80 chars) */
+    streaming_preview?: string;
   }>;
   blackboard: BlackboardItem[];
+  /** Pinned blackboard items (truncated to 120 chars, for OpenCode TUI) */
+  pinned_blackboard: Array<{ type: string; content: string }>;
   pending_guidance: number;
   recent_posts: Post[];
   /** Latest progress message for display */
   latest_event?: string;
+  /** Usage hint for the calling agent */
+  hint: string;
 }
 
 // ─── Progress Events for Real-time Notifications ────────────────────────────

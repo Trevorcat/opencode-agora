@@ -327,31 +327,48 @@ export class BlackboardStore {
       }
     }
 
+    const blackboard = await this.getBlackboard(topicId);
+    const pinnedItems = blackboard
+      .filter(item => item.pinned)
+      .map(item => ({ type: item.type, content: item.content.slice(0, 120) }));
+
+    const resolvedStatus: LiveStatus["status"] =
+      topic.status === "running" && await this.isPaused(topicId) ? "paused" : topic.status;
+
     return {
       topic_id: topicId,
       question: topic.question,
       language: topic.language,
-      status: topic.status === "running" && await this.isPaused(topicId) ? "paused" : topic.status,
+      status: resolvedStatus,
       current_round: currentRound,
       total_rounds: topic.config.max_rounds,
+      progress: `Round ${currentRound}/${topic.config.max_rounds}`,
       agents: topic.config.agents.map(agent => {
         const eventState = agentEventState.get(agent.role);
         const fileStatus = this.determineAgentStatus(agent.role, posts);
-        // Event state overrides file state for real-time "thinking" and "error"
         const status = (fileStatus === "posted") ? "posted" : (eventState?.status ?? fileStatus);
+        const lastPost = [...allPosts].reverse().find((p: Post) => p.role === agent.role);
+        const preview = lastPost?.reasoning?.[0]
+          ? lastPost.reasoning[0].slice(0, 100) + (lastPost.reasoning[0].length > 100 ? "…" : "")
+          : undefined;
         return {
           role: agent.role,
           model: agent.model,
           status,
-          last_post: [...allPosts].reverse().find((p: Post) => p.role === agent.role),
+          last_post: lastPost,
           streaming_text: eventState?.streamText,
           persona: agent.persona,
+          last_post_preview: preview,
+          last_post_position: lastPost?.position,
+          streaming_preview: eventState?.streamText?.slice(0, 80),
         };
       }),
-      blackboard: await this.getBlackboard(topicId),
+      blackboard,
+      pinned_blackboard: pinnedItems,
       pending_guidance: pendingGuidance.length,
       recent_posts: allPosts.slice(-10),
       latest_event: latestEventMessage,
+      hint: "Use forum.get_round to read full posts, forum.get_consensus for final result.",
     };
   }
 
