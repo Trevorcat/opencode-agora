@@ -25,6 +25,7 @@ interface MessagePart {
 interface MessageResponse {
   info?: {
     structured?: unknown;
+    error?: unknown;
   };
   parts?: MessagePart[];
 }
@@ -100,6 +101,14 @@ export class OpenCodeHttpClient {
 
     const data = (await res.json()) as MessageResponse;
 
+    // Fast-fail on provider/API errors instead of returning null and waiting for timeout.
+    // OpenCode returns HTTP 200 even when the underlying LLM call fails; the error is in info.error.
+    if (data.info?.error) {
+      const errData = (data.info.error as Record<string, unknown>).data as Record<string, unknown> | undefined;
+      const message = (errData?.message as string | undefined) ?? JSON.stringify(data.info.error);
+      throw new Error(`Provider error: ${message}`);
+    }
+
     if (opts.format !== undefined) {
       // Primary path: structured output captured by OpenCode's StructuredOutput tool
       if (data.info?.structured !== undefined) {
@@ -124,16 +133,29 @@ export class OpenCodeHttpClient {
       return null;
     }
 
-    // Find last non-synthetic text part
+    // Find last usable text part.
+    // Pass 1: prefer non-synthetic text parts (cleaner response without tool scaffolding)
+    // Pass 2: fall back to synthetic text parts (lilith provider marks assistant text as synthetic)
     const parts = data.parts ?? [];
     console.error("[opencode-http-client] text path: parts count:", parts.length);
     if (parts.length > 0) {
       console.error("[opencode-http-client] parts summary:", JSON.stringify(parts.map(p => ({ type: p.type, synthetic: p.synthetic, textLen: p.text?.length ?? 0 }))));
     }
+
+    // Pass 1: non-synthetic
     for (let i = parts.length - 1; i >= 0; i--) {
       const part = parts[i];
       if (part.type === "text" && part.synthetic !== true && part.text !== undefined) {
-        console.error("[opencode-http-client] returning text part, len:", part.text.length, "preview:", part.text.slice(0, 200));
+        console.error("[opencode-http-client] returning non-synthetic text part, len:", part.text.length, "preview:", part.text.slice(0, 200));
+        return part.text;
+      }
+    }
+
+    // Pass 2: accept synthetic text parts (lilith/remote providers may mark response as synthetic)
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (part.type === "text" && part.text !== undefined) {
+        console.error("[opencode-http-client] returning synthetic text part, len:", part.text.length, "preview:", part.text.slice(0, 200));
         return part.text;
       }
     }
