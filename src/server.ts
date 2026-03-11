@@ -310,6 +310,8 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
           topicId,
           status: "started",
           message: "Debate started asynchronously. Use forum.get_live_status to monitor.",
+          watch: `npm run tui ${topicId}`,
+          watch_hint: "Run the above command in a new terminal to watch the full debate in real-time.",
         });
       } catch (error) {
         return toToolResult(
