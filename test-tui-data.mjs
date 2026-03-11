@@ -1,17 +1,17 @@
 import { BlackboardStore } from './dist/blackboard/store.js';
 import { DebateController } from './dist/moderator/controller.js';
-import { loadOpenCodeConfig, resolveProviders } from './dist/config/opencode-loader.js';
+import { OpenCodeHttpClient } from './dist/agents/opencode-http-client.js';
 
 async function testTUI() {
   const store = new BlackboardStore('.agora');
   await store.init();
-  
-  const openCodeConfig = await loadOpenCodeConfig();
-  const providers = resolveProviders(openCodeConfig);
-  
+
+  const opencodeUrl = await OpenCodeHttpClient.discoverUrl();
+
   const controller = new DebateController({
     store,
-    providers,
+    opencodeUrl,
+    directory: process.cwd(),
     retryOpts: { maxAttempts: 3, baseDelayMs: 1000 },
     timeoutMs: 60000,
   });

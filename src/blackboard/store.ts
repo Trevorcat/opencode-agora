@@ -285,7 +285,7 @@ export class BlackboardStore {
     const pendingGuidance = await this.getPendingGuidance(topicId);
 
     // Read recent events to enrich agent statuses with thinking/streaming info
-    const recentEvents = await this.getRecentEvents(topicId, 30);
+    const recentEvents = await this.getRecentEvents(topicId);
 
     // Build a map of latest event per agent for the current round
     const agentEventState = new Map<string, { status: "thinking" | "error"; streamText?: string }>();
@@ -329,6 +329,8 @@ export class BlackboardStore {
 
     return {
       topic_id: topicId,
+      question: topic.question,
+      language: topic.language,
       status: topic.status === "running" && await this.isPaused(topicId) ? "paused" : topic.status,
       current_round: currentRound,
       total_rounds: topic.config.max_rounds,
@@ -411,15 +413,16 @@ export class BlackboardStore {
   }
 
   /**
-   * Read the most recent N events from the event log.
-   * Reads the tail of the file efficiently for large logs.
+   * Read events from the event log.
+   * If `count` is provided, returns only the most recent N events.
+   * If `count` is omitted, returns all events.
    */
-  async getRecentEvents(topicId: string, count = 50): Promise<ProgressEvent[]> {
+  async getRecentEvents(topicId: string, count?: number): Promise<ProgressEvent[]> {
     const eventsPath = path.join(this.topicDir(topicId), "events.jsonl");
     try {
       const content = await readFile(eventsPath, "utf8");
       const lines = content.trim().split("\n").filter(Boolean);
-      const tail = lines.slice(-count);
+      const tail = typeof count === "number" ? lines.slice(-count) : lines;
       const events: ProgressEvent[] = [];
       for (const line of tail) {
         try {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Post } from '../../blackboard/types.js';
 import { theme, getAgentColor, getAgentSymbol } from '../theme.js';
+import { getRoleDisplayName } from '../../utils/role-localization.js';
 
 export type ThinkingAgent = {
   role: string;
@@ -14,6 +15,7 @@ export type PostFeedProps = {
   onPostClick?: (postId: string) => void;
   /** Agents currently thinking/streaming in the current round */
   thinkingAgents?: ThinkingAgent[];
+  language?: string;
 };
 
 export const PostFeed: React.FC<PostFeedProps> = ({ 
@@ -22,6 +24,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
   expandedPostId,
   onPostClick,
   thinkingAgents = [],
+  language,
 }) => {
   const [spinnerFrame, setSpinnerFrame] = useState(0);
   
@@ -105,6 +108,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
             const isExpanded = expandedPostId === postId;
             const roleColor = getAgentColor(post.role);
             const roleSymbol = getAgentSymbol(post.role);
+            const roleLabel = getRoleDisplayName(post.role, language).toUpperCase();
             
             const borderStyle = isExpanded || isLatest ? 'double' : 'single';
             const borderColor = isSelected ? theme.text.primary : roleColor;
@@ -113,6 +117,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
               : `${post.position}. ${(post.reasoning?.[0] || '').substring(0, 65)}${(post.reasoning?.[0] || '').length > 65 ? '...' : ''}`;
             
             return (
+              // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI uses terminal mouse events on box nodes.
               <box 
                 key={postId}
                 style={{ 
@@ -124,10 +129,15 @@ export const PostFeed: React.FC<PostFeedProps> = ({
                 }}
                 // @ts-ignore OpenTUI mouse event
                 onMouseDown={() => onPostClick?.(postId)}
+                // @ts-ignore OpenTUI keyboard event
+                onKeyDown={(e: { key?: { name?: string } }) => {
+                  const name = e?.key?.name;
+                  if (name === 'return' || name === 'space') onPostClick?.(postId);
+                }}
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <text style={{ bold: true, fg: roleColor }}>
-                    {roleSymbol}{' ['}{post.role.toUpperCase()}{']'}{isSelected ? ' ★' : ''}{isExpanded ? ' [EXPANDED]' : ''}
+                    {roleSymbol}{' ['}{roleLabel}{']'}{isSelected ? ' ★' : ''}{isExpanded ? ' [EXPANDED]' : ''}
                   </text>
                   <text style={{ fg: theme.text.dim }}>{'Round '}{post.round}</text>
                 </box>
@@ -143,6 +153,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
           {thinkingAgents.map((agent) => {
             const roleColor = getAgentColor(agent.role);
             const roleSymbol = getAgentSymbol(agent.role);
+            const roleLabel = getRoleDisplayName(agent.role, language).toUpperCase();
             const spinner = theme.status.thinkingFrames[spinnerFrame];
             const streamPreview = agent.streaming_text
               ? agent.streaming_text.substring(agent.streaming_text.length - 80).replace(/\n/g, ' ')
@@ -161,7 +172,7 @@ export const PostFeed: React.FC<PostFeedProps> = ({
               >
                 <box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <text style={{ bold: true, fg: roleColor }}>
-                    {spinner} {roleSymbol} [{agent.role.toUpperCase()}] THINKING...
+                    {spinner} {roleSymbol} [{roleLabel}] {language === 'zh' ? '思考中...' : 'THINKING...'}
                   </text>
                   <text style={{ fg: theme.accent.yellow }}>{spinner}</text>
                 </box>

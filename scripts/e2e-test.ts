@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import { BlackboardStore } from '../src/blackboard/store.js';
 import { DebateController } from '../src/moderator/controller.js';
 import { ConsensusSynthesizer } from '../src/consensus/synthesizer.js';
-import { loadOpenCodeConfig, resolveProviders } from '../src/config/opencode-loader.js';
+import { OpenCodeHttpClient } from '../src/agents/opencode-http-client.js';
 import { loadAgentConfig } from '../src/agents/default-personas.js';
 import type { Topic, ProgressEvent } from '../src/blackboard/types.js';
 
@@ -30,12 +30,11 @@ function generateTopicId(): string {
 async function main() {
   console.log('=== OpenCode Agora E2E Test ===\n');
   
-  // 1. Load config
-  console.log('[1/6] Loading OpenCode config...');
-  const openCodeConfig = await loadOpenCodeConfig();
-  const providers = resolveProviders(openCodeConfig);
-  console.log(`  Providers: ${[...providers.keys()].join(', ')}`);
-  
+  // 1. Discover OpenCode URL
+  console.log('[1/6] Discovering OpenCode server URL...');
+  const opencodeUrl = await OpenCodeHttpClient.discoverUrl();
+  console.log(`  URL: ${opencodeUrl}`);
+
   // 2. Load agents
   const agoraDir = path.join(process.cwd(), '.agora');
   console.log('\n[2/6] Loading agent config...');
@@ -78,7 +77,8 @@ async function main() {
   
   const controller = new DebateController({
     store,
-    providers,
+    opencodeUrl,
+    directory: process.cwd(),
     retryOpts: {
       maxAttempts: 3,
       baseDelayMs: 1_000,
@@ -99,21 +99,23 @@ async function main() {
         case 'agent_stream':
           // Don't log every chunk, too noisy
           break;
-        case 'agent_posted':
+        case 'agent_posted': {
           const post = (event as any).post;
           console.log(`  [${elapsed}s] ${post.role} posted (confidence: ${post.confidence})`);
           console.log(`    Position: ${post.position.slice(0, 100)}...`);
           break;
+        }
         case 'round_complete':
           console.log(`  [${elapsed}s] Round ${(event as any).round} complete (${(event as any).posts.length} posts)`);
           break;
         case 'voting_started':
           console.log(`  [${elapsed}s] Voting phase started`);
           break;
-        case 'vote_cast':
+        case 'vote_cast': {
           const vote = (event as any).vote;
           console.log(`  [${elapsed}s] ${vote.role} voted: ${vote.chosen_position.slice(0, 60)}...`);
           break;
+        }
         case 'agent_error':
           console.log(`  [${elapsed}s] ERROR: ${(event as any).agent}: ${(event as any).error}`);
           break;
@@ -150,7 +152,8 @@ async function main() {
   const allPosts = await Promise.all([1, 2, 3].map(round => store.getRoundPosts(topicId, round)));
   
   const synthesizer = new ConsensusSynthesizer({
-    providers,
+    opencodeUrl,
+    directory: process.cwd(),
     moderatorModel,
   });
   

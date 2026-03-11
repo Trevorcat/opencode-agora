@@ -1,102 +1,73 @@
 // src/agents/process-manager.ts
-// Calls LLM models via OpenAI-compatible API using providers from OpenCode config.
+// Calls agents via OpenCode HTTP API instead of direct LLM provider calls.
 
-import OpenAI from "openai";
-
-import type {
-  AgentConfig,
-  Post,
-  ResolvedProvider,
-  Vote,
-} from "../blackboard/types.js";
-import { resolveModelProvider } from "../config/opencode-loader.js";
-
-type ChatMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
+import type { AgentConfig, Post, Vote } from "../blackboard/types.js";
+import { OpenCodeHttpClient, type SendMessageOptions } from "./opencode-http-client.js";
+import type { BuiltPrompt } from "../moderator/prompt-builder.js";
 
 type JsonRecord = Record<string, unknown>;
 
 export class AgentProcessManager {
-  private readonly clients = new Map<string, OpenAI>();
+  private readonly client: OpenCodeHttpClient;
 
-  constructor(private readonly providers: Map<string, ResolvedProvider>) {}
+  constructor(opencodeUrl: string, directory: string) {
+    this.client = new OpenCodeHttpClient(opencodeUrl, directory);
+  }
+
+  async createSession(): Promise<string> {
+    return this.client.createSession();
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    return this.client.deleteSession(sessionId);
+  }
 
   async callAgent(
+    sessionId: string,
     agent: AgentConfig,
-    messages: ChatMessage[],
+    prompt: BuiltPrompt,
     round: number,
     onChunk?: (chunk: string, isComplete: boolean) => void,
   ): Promise<Post> {
-    const { client, modelName } = this.getClientForModel(agent.model);
-    
-    // Support streaming if callback provided
-    if (onChunk) {
-      const stream = await client.chat.completions.create({
-        model: modelName,
-        messages,
-        response_format: { type: "json_object" },
-        stream: true,
-      });
+    const { providerID, modelID } = this.parseModelId(agent.model);
 
-      let fullContent = '';
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        fullContent += content;
-        onChunk(fullContent, false);
-      }
-      
-      onChunk(fullContent, true);
-      
-      const parsed = this.parseJSON(fullContent);
-      const payload = this.toRecord(parsed, "Agent response must be a JSON object");
-      
-      return this.buildPost(agent, round, payload);
+    const opts: SendMessageOptions = {
+      model: { providerID, modelID },
+      system: prompt.system,
+      // Omit format: json_schema — the lilith provider returns 0 parts with structured output.
+      // The system prompt already instructs: "Return ONLY valid JSON."
+      // sendMessage() will parse JSON from the text response via extractJsonFromText().
+      parts: [{ type: "text", text: prompt.userText }],
+    };
+
+    const result = await this.client.sendMessage(sessionId, opts);
+    const payload = this.toRecord(this.parseResult(result), "Agent response must be a JSON object");
+    const post = this.buildPost(agent, round, payload);
+
+    // onChunk called once with final position (streaming not available over HTTP)
+    if (onChunk) {
+      onChunk(post.position, true);
     }
 
-    // Non-streaming fallback
-    const response = await client.chat.completions.create({
-      model: modelName,
-      messages,
-      response_format: { type: "json_object" },
-    });
-
-    const content = response.choices[0]?.message?.content;
-    const parsed = this.parseJSON(content);
-    const payload = this.toRecord(parsed, "Agent response must be a JSON object");
-
-    return this.buildPost(agent, round, payload);
+    return post;
   }
 
-  private buildPost(agent: AgentConfig, round: number, payload: JsonRecord): Post {
-    const position = this.readString(payload, "position");
-    const reasoning = this.readStringArray(payload, "reasoning");
+  async callVote(
+    sessionId: string,
+    agent: AgentConfig,
+    prompt: BuiltPrompt,
+  ): Promise<Vote> {
+    const { providerID, modelID } = this.parseModelId(agent.model);
 
-    return {
-      role: agent.role,
-      model: agent.model,
-      round,
-      timestamp: new Date().toISOString(),
-      position,
-      reasoning,
-      confidence: this.clampConfidence(payload.confidence),
-      open_questions: this.readOptionalStringArray(payload, "open_questions"),
-      responses_to_peers: this.readOptionalPeerResponses(payload),
+    const opts: SendMessageOptions = {
+      model: { providerID, modelID },
+      system: prompt.system,
+      // Omit format: json_schema — same reason as callAgent (lilith provider compatibility).
+      parts: [{ type: "text", text: prompt.userText }],
     };
-  }
 
-  async callVote(agent: AgentConfig, messages: ChatMessage[]): Promise<Vote> {
-    const { client, modelName } = this.getClientForModel(agent.model);
-    const response = await client.chat.completions.create({
-      model: modelName,
-      messages,
-      response_format: { type: "json_object" },
-    });
-
-    const content = response.choices[0]?.message?.content;
-    const parsed = this.parseJSON(content);
-    const payload = this.toRecord(parsed, "Vote response must be a JSON object");
+    const result = await this.client.sendMessage(sessionId, opts);
+    const payload = this.toRecord(this.parseResult(result), "Vote response must be a JSON object");
 
     return {
       role: agent.role,
@@ -104,74 +75,66 @@ export class AgentProcessManager {
       timestamp: new Date().toISOString(),
       chosen_position: this.readString(payload, "chosen_position"),
       rationale: this.readString(payload, "rationale"),
-      confidence: this.clampConfidence(payload.confidence),
+      confidence: this.clampConfidence(payload["confidence"]),
       dissent_notes: this.readOptionalString(payload, "dissent_notes"),
     };
   }
 
-  /**
-   * Resolve "provider/model" to an OpenAI client + bare model name.
-   * Clients are cached per provider.
-   */
-  private getClientForModel(fullModelId: string): { client: OpenAI; modelName: string } {
-    const { provider, modelName } = resolveModelProvider(fullModelId, this.providers);
-    const cacheKey = provider.baseURL;
-
-    let client = this.clients.get(cacheKey);
-    if (!client) {
-      client = new OpenAI({
-        apiKey: provider.apiKey,
-        baseURL: provider.baseURL,
-      });
-      this.clients.set(cacheKey, client);
+  private parseModelId(fullModelId: string): { providerID: string; modelID: string } {
+    const slashIdx = fullModelId.indexOf("/");
+    if (slashIdx === -1) {
+      throw new Error(`Invalid model ID "${fullModelId}": must be "provider/model" format`);
     }
-
-    return { client, modelName };
+    return {
+      providerID: fullModelId.slice(0, slashIdx),
+      modelID: fullModelId.slice(slashIdx + 1),
+    };
   }
 
-  private parseJSON(content: string | null | undefined): unknown {
-    if (!content) {
-      throw new Error("Model returned empty response content");
-    }
+  private buildPost(agent: AgentConfig, round: number, payload: JsonRecord): Post {
+    return {
+      role: agent.role,
+      model: agent.model,
+      round,
+      timestamp: new Date().toISOString(),
+      position: this.readString(payload, "position"),
+      reasoning: this.readStringArray(payload, "reasoning"),
+      confidence: this.clampConfidence(payload["confidence"]),
+      open_questions: this.readOptionalStringArray(payload, "open_questions"),
+      responses_to_peers: this.readOptionalPeerResponses(payload),
+    };
+  }
 
-    // Strip DeepSeek-style <think>...</think> reasoning blocks
-    let cleaned = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-
-    // Strip markdown code fences
-    cleaned = cleaned
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/, "")
-      .trim();
-
-    // If there's still non-JSON preamble, try to extract the JSON object
-    if (!cleaned.startsWith("{") && !cleaned.startsWith("[")) {
-      const jsonStart = cleaned.indexOf("{");
-      if (jsonStart !== -1) {
-        cleaned = cleaned.slice(jsonStart);
+  /**
+   * Parse the result from sendMessage() into a JSON object.
+   * sendMessage() returns an object when format is specified, or a raw string otherwise.
+   * When it's a string, try to extract JSON from it.
+   */
+  private parseResult(result: unknown): unknown {
+    if (typeof result === "string") {
+      // Try to extract JSON from the text
+      const text = result.trim();
+      // Try direct parse
+      if (text.startsWith("{") || text.startsWith("[")) {
+        try { return JSON.parse(text); } catch { /* fall through */ }
       }
-    }
-
-    // Try to find the matching closing brace if there's trailing text
-    if (cleaned.startsWith("{")) {
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-      for (let i = 0; i < cleaned.length; i++) {
-        const ch = cleaned[i];
-        if (escaped) { escaped = false; continue; }
-        if (ch === "\\") { escaped = true; continue; }
-        if (ch === '"') { inString = !inString; continue; }
-        if (inString) continue;
-        if (ch === "{") depth++;
-        if (ch === "}") { depth--; if (depth === 0) { cleaned = cleaned.slice(0, i + 1); break; } }
+      // Try ```json ... ``` code fence
+      const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch?.[1]) {
+        try { return JSON.parse(fenceMatch[1].trim()); } catch { /* fall through */ }
       }
+      // Try first { ... } block
+      const braceStart = text.indexOf("{");
+      if (braceStart !== -1) {
+        const braceEnd = text.lastIndexOf("}");
+        if (braceEnd > braceStart) {
+          try { return JSON.parse(text.slice(braceStart, braceEnd + 1)); } catch { /* fall through */ }
+        }
+      }
+      // Couldn't extract JSON — return the string as-is (toRecord will throw with a clear message)
+      return result;
     }
-
-    try {
-      return JSON.parse(cleaned);
-    } catch {
-      throw new Error("Model returned invalid JSON");
-    }
+    return result;
   }
 
   private toRecord(value: unknown, message: string): JsonRecord {
@@ -201,7 +164,7 @@ export class AgentProcessManager {
     if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
       throw new Error(`Missing or invalid ${key}`);
     }
-    return value;
+    return value as string[];
   }
 
   private readOptionalStringArray(source: JsonRecord, key: string): string[] | undefined {
@@ -210,23 +173,23 @@ export class AgentProcessManager {
     if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
       throw new Error(`Invalid ${key}`);
     }
-    return value;
+    return value as string[];
   }
 
   private readOptionalPeerResponses(source: JsonRecord): Post["responses_to_peers"] {
-    const value = source.responses_to_peers;
+    const value = source["responses_to_peers"];
     if (value === undefined) return undefined;
     if (!Array.isArray(value)) throw new Error("Invalid responses_to_peers");
 
     const parsed: NonNullable<Post["responses_to_peers"]> = [];
     for (const item of value) {
       if (typeof item !== "object" || item === null || Array.isArray(item)) {
-        throw new Error("Invalid responses_to_peers");
+        throw new Error("Invalid responses_to_peers item");
       }
       const record = item as JsonRecord;
       const toRole = this.readString(record, "to_role");
       const comment = this.readString(record, "comment");
-      const stance = record.stance;
+      const stance = record["stance"];
       if (stance !== "agree" && stance !== "partially_agree" && stance !== "disagree") {
         throw new Error("Invalid responses_to_peers stance");
       }

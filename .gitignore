@@ -1,6 +1,33 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+
+# Data directory (user-specific)
 .agora/
+
+# Environment files
 *.env
 .env
 *.local
+
+# Log files
+*.log
+probe-*
+e2e-*.log
+
+# Temporary files
+*.tmp
+*.temp
+nul
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

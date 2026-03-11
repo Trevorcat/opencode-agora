@@ -4,7 +4,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import type { OpenCodeConfig, ResolvedProvider } from "../blackboard/types.js";
+import type { OpenCodeConfig } from "../blackboard/types.js";
 
 /**
  * Locate the opencode.json config file.
@@ -78,23 +78,6 @@ export async function loadOpenCodeConfig(): Promise<OpenCodeConfig> {
 }
 
 /**
- * Build a map of provider name → ResolvedProvider from the OpenCode config.
- * Resolves "{env:VAR}" patterns in apiKey values.
- */
-export function resolveProviders(config: OpenCodeConfig): Map<string, ResolvedProvider> {
-  const providers = new Map<string, ResolvedProvider>();
-
-  for (const [name, entry] of Object.entries(config.provider)) {
-    providers.set(name, {
-      baseURL: entry.options.baseURL,
-      apiKey: resolveApiKey(entry.options.apiKey),
-    });
-  }
-
-  return providers;
-}
-
-/**
  * List all available models from the OpenCode config.
  * Iterates over all providers and their models, building an array of AvailableModel entries.
  */
@@ -114,20 +97,4 @@ export function listAvailableModels(config: OpenCodeConfig): AvailableModel[] {
   return models;
 }
 
-/**
- * Resolve a fully qualified model ID to a provider connection.
- * Given "lilith/claude-opus-4-6", looks up "lilith" in the provider map.
- */
-export function resolveModelProvider(
-  fullModelId: string,
-  providers: Map<string, ResolvedProvider>,
-): { provider: ResolvedProvider; modelName: string } {
-  const { provider: providerKey, model: modelName } = parseModelId(fullModelId);
-  const provider = providers.get(providerKey);
-  if (!provider) {
-    throw new Error(
-      `Provider "${providerKey}" not found in OpenCode config. Available: ${[...providers.keys()].join(", ")}`
-    );
-  }
-  return { provider, modelName };
-}
+

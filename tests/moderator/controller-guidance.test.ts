@@ -4,18 +4,22 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { BlackboardStore } from "../../src/blackboard/store.js";
-import type { AgentConfig } from "../../src/blackboard/types.js";
+import type { AgentConfig, ProgressEvent } from "../../src/blackboard/types.js";
 import { DebateController } from "../../src/moderator/controller.js";
 
 // ─── Mock AgentProcessManager ─────────────────────────────────────────────────
-const { mockCallAgent, mockCallVote } = vi.hoisted(() => ({
+const { mockCallAgent, mockCallVote, mockCreateSession, mockDeleteSession } = vi.hoisted(() => ({
   mockCallAgent: vi.fn(),
   mockCallVote: vi.fn(),
+  mockCreateSession: vi.fn().mockResolvedValue("mock-session-id"),
+  mockDeleteSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../src/agents/process-manager.js", () => ({
   AgentProcessManager: vi.fn().mockImplementation(function AgentProcessManagerMock() {
     return {
+      createSession: mockCreateSession,
+      deleteSession: mockDeleteSession,
       callAgent: mockCallAgent,
       callVote: mockCallVote,
     };
@@ -63,7 +67,7 @@ const agents: AgentConfig[] = [
 describe("DebateController – guidance", () => {
   let rootDir: string;
   let store: BlackboardStore;
-  let onProgress: ReturnType<typeof vi.fn>;
+  let onProgressMock: ReturnType<typeof vi.fn>;
   let controller: DebateController;
 
   beforeEach(async () => {
@@ -73,10 +77,14 @@ describe("DebateController – guidance", () => {
 
     mockCallAgent.mockReset();
     mockCallVote.mockReset();
+    mockCreateSession.mockReset();
+    mockDeleteSession.mockReset();
+    mockCreateSession.mockResolvedValue("mock-session-id");
+    mockDeleteSession.mockResolvedValue(undefined);
     mockBuildRound1Prompt.mockReset();
     mockBuildRoundNPrompt.mockReset();
 
-    mockCallAgent.mockImplementation((agent: AgentConfig, _msgs: unknown, round: number) =>
+    mockCallAgent.mockImplementation((_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) =>
       Promise.resolve({
         role: agent.role,
         model: agent.model,
@@ -88,7 +96,7 @@ describe("DebateController – guidance", () => {
       }),
     );
 
-    mockCallVote.mockImplementation((agent: AgentConfig) =>
+    mockCallVote.mockImplementation((_sessionId: string, agent: AgentConfig) =>
       Promise.resolve({
         role: agent.role,
         model: agent.model,
@@ -99,16 +107,15 @@ describe("DebateController – guidance", () => {
       }),
     );
 
-    onProgress = vi.fn();
+    onProgressMock = vi.fn();
 
     controller = new DebateController({
       store,
-      providers: new Map([
-        ["openai", { baseURL: "https://example.com/v1", apiKey: "fake-key" }],
-      ]),
+      opencodeUrl: "http://127.0.0.1:4096",
+      directory: "/tmp/agora-test",
       retryOpts: { maxAttempts: 1, baseDelayMs: 1 },
       timeoutMs: 500,
-      onProgress,
+      onProgress: onProgressMock as unknown as (event: ProgressEvent) => void,
     });
   });
 
@@ -149,7 +156,7 @@ describe("DebateController – guidance", () => {
 
     await controller.injectGuidance("topic-g2", "Consider London case study.");
 
-    const guidanceAddedEvent = onProgress.mock.calls
+    const guidanceAddedEvent = onProgressMock.mock.calls
       .map((call) => call[0])
       .find((e) => e.type === "guidance_added");
 
@@ -183,7 +190,7 @@ describe("DebateController – guidance", () => {
     expect(blackboard[0]!.author).toBe("human");
 
     // Check blackboard_updated event was emitted
-    const blackboardUpdatedEvent = onProgress.mock.calls
+    const blackboardUpdatedEvent = onProgressMock.mock.calls
       .map((call) => call[0])
       .find((e) => e.type === "blackboard_updated");
 
@@ -211,7 +218,7 @@ describe("DebateController – guidance", () => {
     expect(blackboard).toHaveLength(0);
 
     // Also confirm no blackboard_updated event
-    const blackboardUpdatedEvent = onProgress.mock.calls
+    const blackboardUpdatedEvent = onProgressMock.mock.calls
       .map((call) => call[0])
       .find((e) => e.type === "blackboard_updated");
     expect(blackboardUpdatedEvent).toBeUndefined();
@@ -323,7 +330,7 @@ describe("DebateController – guidance", () => {
     });
 
     let round1AgentsDone = 0;
-    mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
+    mockCallAgent.mockImplementation(async (_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) => {
       if (round === 1) {
         round1AgentsDone++;
         if (round1AgentsDone === agents.length) {

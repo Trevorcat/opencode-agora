@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { BlackboardStore } from './dist/blackboard/store.js';
-import { loadOpenCodeConfig, resolveProviders } from './dist/config/opencode-loader.js';
+
 
 const topicId = process.argv[2] || 'topic_20260309_cdcbdb';
 

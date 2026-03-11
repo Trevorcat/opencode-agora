@@ -6,7 +6,6 @@ import type {
   Guidance,
   Post,
   ProgressEvent,
-  ResolvedProvider,
   Vote,
 } from "../blackboard/types.js";
 import { withRetry, type RetryOptions } from "../resilience/retry.js";
@@ -21,7 +20,8 @@ import {
 
 interface ControllerOptions {
   store: BlackboardStore;
-  providers: Map<string, ResolvedProvider>;
+  opencodeUrl: string;
+  directory: string;
   retryOpts: RetryOptions;
   timeoutMs: number;
   /** Optional callback for progress notifications */
@@ -58,7 +58,7 @@ export class DebateController {
     this.retryOpts = options.retryOpts;
     this.timeoutMs = options.timeoutMs;
     this.onProgress = options.onProgress;
-    this.processManager = new AgentProcessManager(options.providers);
+    this.processManager = new AgentProcessManager(options.opencodeUrl, options.directory);
   }
 
   /**
@@ -94,8 +94,17 @@ export class DebateController {
     const abortController = new AbortController();
     this.abortControllers.set(topicId, abortController);
 
+    // Declared outside try so finally can access it
+    const agentSessions = new Map<string, string>();
+
     try {
       await this.store.updateTopicStatus(topicId, "running");
+
+      // Create one OpenCode session per agent (preserves conversation history across rounds)
+      for (const agent of agents) {
+        agentSessions.set(agent.role, await this.processManager.createSession());
+      }
+
       const allPosts: Post[][] = [];
 
       for (let round = 1; round <= 3; round++) {
@@ -163,7 +172,13 @@ export class DebateController {
 
           const post = await withRetry(
             () => withTimeout(
-              () => this.processManager.callAgent(agent, prompt, round, onChunk), 
+              () => this.processManager.callAgent(
+                agentSessions.get(agent.role) ?? (() => { throw new Error(`No session for ${agent.role}`); })(),
+                agent,
+                prompt,
+                round,
+                onChunk,
+              ),
               { timeoutMs: this.timeoutMs, label }
             ),
             {
@@ -268,7 +283,11 @@ export class DebateController {
         });
 
         const vote = await this.callWithResilience(`${agent.role}-vote`, () =>
-          this.processManager.callVote(agent, prompt),
+          this.processManager.callVote(
+            agentSessions.get(agent.role) ?? (() => { throw new Error(`No session for ${agent.role}`); })(),
+            agent,
+            prompt,
+          ),
         );
 
         if (vote) {
@@ -303,6 +322,12 @@ export class DebateController {
       });
       throw error;
     } finally {
+      // Best-effort cleanup of OpenCode sessions (fire-and-forget, errors are ignored)
+      const sessionIds = [...agentSessions.values()];
+      agentSessions.clear();
+      void Promise.allSettled(
+        sessionIds.map((sid) => this.processManager.deleteSession(sid)),
+      );
       this.abortControllers.delete(topicId);
     }
   }
@@ -506,9 +531,11 @@ export class DebateController {
     }
   }
 
-  private async waitIfPaused(topicId: string, round: number): Promise<void> {
+  private async waitIfPaused(topicId: string, _round: number): Promise<void> {
+    const abortController = this.abortControllers.get(topicId);
     while (await this.store.isPaused(topicId)) {
-      await new Promise((r) => setTimeout(r, 100));
+      if (abortController?.signal.aborted) return;
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
 

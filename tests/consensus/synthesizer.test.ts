@@ -1,49 +1,41 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import OpenAI from "openai";
-import { ConsensusSynthesizer } from "../../src/consensus/synthesizer";
+import { ConsensusSynthesizer } from "../../src/consensus/synthesizer.js";
 
-const { mockCreate } = vi.hoisted(() => ({
-  mockCreate: vi.fn(),
+const { mockCreateSession, mockSendMessage, mockDeleteSession } = vi.hoisted(() => ({
+  mockCreateSession: vi.fn(),
+  mockSendMessage: vi.fn(),
+  mockDeleteSession: vi.fn(),
 }));
 
-vi.mock("openai", () => {
-  const MockOpenAI = vi.fn(function MockOpenAI() {
+vi.mock("../../src/agents/opencode-http-client.js", () => ({
+  OpenCodeHttpClient: vi.fn().mockImplementation(function () {
     return {
-      chat: { completions: { create: mockCreate } },
+      createSession: mockCreateSession,
+      sendMessage: mockSendMessage,
+      deleteSession: mockDeleteSession,
     };
-  });
-
-  return {
-    default: Object.assign(MockOpenAI, { __mockCreate: mockCreate }),
-  };
-});
+  }),
+}));
 
 describe("ConsensusSynthesizer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCreateSession.mockResolvedValue("sess-123");
+    mockDeleteSession.mockResolvedValue(undefined);
   });
 
   it("synthesize returns consensus with expected topic and metadata", async () => {
-    mockCreate.mockResolvedValue({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              conclusion: "Adopt option A",
-              confidence: 0.82,
-              key_arguments: ["A has strongest evidence"],
-              dissenting_views: ["B might be cheaper"],
-              convergence_method: "majority_vote",
-            }),
-          },
-        },
-      ],
+    mockSendMessage.mockResolvedValue({
+      conclusion: "Adopt option A",
+      confidence: 0.82,
+      key_arguments: ["A has strongest evidence"],
+      dissenting_views: ["B might be cheaper"],
+      convergence_method: "majority_vote",
     });
 
     const synthesizer = new ConsensusSynthesizer({
-      providers: new Map([
-        ["test", { baseURL: "https://example.test", apiKey: "fake" }],
-      ]),
+      opencodeUrl: "http://127.0.0.1:4096",
+      directory: "/tmp/test",
       moderatorModel: "test/gpt-moderator",
     });
 
@@ -54,7 +46,7 @@ describe("ConsensusSynthesizer", () => {
         {
           role: "architect",
           model: "m1",
-          timestamp: "2026-03-09T10:00:00.000Z",
+          timestamp: "...",
           chosen_position: "A",
           rationale: "Best scalability",
           confidence: 0.9,
@@ -68,35 +60,22 @@ describe("ConsensusSynthesizer", () => {
     expect(result.conclusion).toBe("Adopt option A");
     expect(result.rounds_taken).toBe(2);
     expect(result.generated_by).toBe("test/gpt-moderator");
-
-    expect(OpenAI).toHaveBeenCalledWith({
-      baseURL: "https://example.test",
-      apiKey: "fake",
-    });
-    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    expect(mockSendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("synthesize computes vote_distribution from votes", async () => {
-    mockCreate.mockResolvedValue({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              conclusion: "A is preferred",
-              confidence: 0.75,
-              key_arguments: ["A is robust"],
-              dissenting_views: ["B is simpler"],
-              convergence_method: "moderated_summary",
-            }),
-          },
-        },
-      ],
+    mockSendMessage.mockResolvedValue({
+      conclusion: "A is preferred",
+      confidence: 0.75,
+      key_arguments: ["A is robust"],
+      dissenting_views: ["B is simpler"],
+      convergence_method: "moderated_summary",
     });
 
     const synthesizer = new ConsensusSynthesizer({
-      providers: new Map([
-        ["test", { baseURL: "https://example.test", apiKey: "fake" }],
-      ]),
+      opencodeUrl: "http://127.0.0.1:4096",
+      directory: "/tmp/test",
       moderatorModel: "test/gpt-moderator",
     });
 
@@ -107,7 +86,7 @@ describe("ConsensusSynthesizer", () => {
         {
           role: "r1",
           model: "m1",
-          timestamp: "2026-03-09T10:00:00.000Z",
+          timestamp: "...",
           chosen_position: "A",
           rationale: "A is better",
           confidence: 0.8,
@@ -115,7 +94,7 @@ describe("ConsensusSynthesizer", () => {
         {
           role: "r2",
           model: "m2",
-          timestamp: "2026-03-09T10:01:00.000Z",
+          timestamp: "...",
           chosen_position: "A",
           rationale: "Also A",
           confidence: 0.7,
@@ -123,7 +102,7 @@ describe("ConsensusSynthesizer", () => {
         {
           role: "r3",
           model: "m3",
-          timestamp: "2026-03-09T10:02:00.000Z",
+          timestamp: "...",
           chosen_position: "B",
           rationale: "I prefer B",
           confidence: 0.6,

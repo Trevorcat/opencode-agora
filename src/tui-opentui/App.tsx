@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 // @ts-ignore OpenTUI uses different module resolution
 import { createCliRenderer } from '@opentui/core';
 // @ts-ignore OpenTUI uses different module resolution
@@ -22,6 +22,8 @@ import { TopicWizard } from './components/TopicWizard.js';
 import { SubagentCard } from './components/SubagentCard.js';
 import { resolvePreset } from '../config/presets.js';
 import { theme } from './theme.js';
+import { detectLanguage } from '../utils/language-detect.js';
+import { localizeAgentsForLanguage } from '../utils/role-localization.js';
 
 export type WizardConfig = {
   question: string;
@@ -36,7 +38,7 @@ export type WizardConfig = {
 export type AppMode = 
   | { kind: 'picker' }
   | { kind: 'wizard' }
-  | { kind: 'launching'; config: WizardConfig }
+  | { kind: 'launching'; config: WizardConfig; topicId: string }
   | { kind: 'debate'; topicId: string };
 
 export type AppProps = {
@@ -71,6 +73,7 @@ export const App: React.FC<AppProps> = ({
   const [debateCollapsed, setDebateCollapsed] = useState(false);
   const [backgroundTopics, setBackgroundTopics] = useState<string[]>([]);
   const [backgroundStatuses, setBackgroundStatuses] = useState<Map<string, LiveStatus | null>>(new Map());
+  const startedLaunchingTopicRef = useRef<string | null>(null);
   
   const { width, height } = useTerminalDimensions();
   const renderer = useRenderer();
@@ -83,7 +86,7 @@ export const App: React.FC<AppProps> = ({
       renderer.requestRender();
     }, 30);
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [renderer]);
 
   // Poll for live status
   useEffect(() => {
@@ -105,13 +108,39 @@ export const App: React.FC<AppProps> = ({
   }, [store, topicId, mode.kind]);
 
   useEffect(() => {
-    setOverlayDismissed(false);
+    if (liveStatus?.status) {
+      setOverlayDismissed(false);
+    }
   }, [liveStatus?.status]);
 
   // Reset collapsed state when mode changes
   useEffect(() => {
-    setDebateCollapsed(false);
+    if (mode.kind) {
+      setDebateCollapsed(false);
+    }
   }, [mode.kind]);
+
+  // Start debate when wizard confirms configuration
+  useEffect(() => {
+    if (mode.kind !== 'launching') return;
+    if (startedLaunchingTopicRef.current === mode.topicId) return;
+
+    startedLaunchingTopicRef.current = mode.topicId;
+
+    try {
+      controller.runDebateAsync({
+        topicId: mode.topicId,
+        question: mode.config.question,
+        agents: mode.config.agents,
+      });
+
+      setMode({ kind: 'debate', topicId: mode.topicId });
+    } catch (err) {
+      console.error('Failed to start wizard debate:', err);
+      setError(err instanceof Error ? err.message : String(err));
+      setMode({ kind: 'picker' });
+    }
+  }, [mode, controller]);
 
   // Poll background topics
   useEffect(() => {
@@ -229,7 +258,9 @@ export const App: React.FC<AppProps> = ({
           onStart={(newTopic, presetId) => {
             const startDebate = async () => {
               try {
-                const agents = await resolvePreset(agoraDir, presetId);
+                const resolvedAgents = await resolvePreset(agoraDir, presetId);
+                const topicLanguage = detectLanguage(newTopic);
+                const agents = localizeAgentsForLanguage(resolvedAgents, topicLanguage);
                 const newTopicId = `topic-${Date.now()}`;
                 controller.runDebateAsync({
                   topicId: newTopicId,
@@ -281,14 +312,15 @@ export const App: React.FC<AppProps> = ({
   // Show wizard mode
   if (mode.kind === 'wizard') {
     return (
-      <TopicWizard
-        availableModels={availableModels}
-        agoraDir={agoraDir}
-        onComplete={(config) => {
-          setMode({ kind: 'launching', config });
-        }}
-        onCancel={() => setMode({ kind: 'picker' })}
-      />
+        <TopicWizard
+          availableModels={availableModels}
+          agoraDir={agoraDir}
+          onComplete={(config) => {
+            const topicIdForWizard = `topic-${Date.now()}`;
+            setMode({ kind: 'launching', config, topicId: topicIdForWizard });
+          }}
+          onCancel={() => setMode({ kind: 'picker' })}
+        />
     );
   }
 
@@ -350,7 +382,7 @@ export const App: React.FC<AppProps> = ({
     <box style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
         {/* Header - fixed 3 rows */}
       <Header
-        question={liveStatus.topic_id}
+        question={liveStatus.question}
         status={liveStatus.status === 'paused' ? 'paused' : liveStatus.status === 'completed' ? 'completed' : liveStatus.status === 'failed' ? 'failed' : 'running'}
         topicId={topicId}
         round={liveStatus.current_round}
@@ -369,6 +401,7 @@ export const App: React.FC<AppProps> = ({
             expandedRole={expandedAgentRole}
             onExpandChange={setExpandedAgentRole}
             isPreparingRound={isPreparingRound}
+            language={liveStatus.language}
           />
         </box>
 
@@ -383,6 +416,7 @@ export const App: React.FC<AppProps> = ({
               const idx = liveStatus.recent_posts.findIndex((_, i) => `${liveStatus.recent_posts[i].role}-${i}` === postId);
               if (idx >= 0) setSelectedPostIndex(idx);
             }}
+            language={liveStatus.language}
             thinkingAgents={liveStatus.agents
               .filter(a => a.status === 'thinking')
               .map(a => ({ role: a.role, streaming_text: a.streaming_text }))}

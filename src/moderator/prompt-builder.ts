@@ -2,10 +2,10 @@ import type { AgentConfig, BlackboardItem, Guidance, Post } from "../blackboard/
 import type { DetectedLanguage } from "../utils/language-detect.js";
 import { getLanguageInstruction } from "../utils/language-detect.js";
 
-type ChatMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
+export interface BuiltPrompt {
+  system: string;
+  userText: string;
+}
 
 const round1JsonSchema = `{
   "position": "string",
@@ -46,7 +46,7 @@ export function buildRound1Prompt(params: {
   guidance?: Guidance[];
   blackboard?: BlackboardItem[];
   language?: DetectedLanguage;
-}): ChatMessage[] {
+}): BuiltPrompt {
   const { agent, question, context, guidance, blackboard, language } = params;
 
   const langInstruction = language ? getLanguageInstruction(language) : "";
@@ -98,10 +98,10 @@ export function buildRound1Prompt(params: {
     }
   }
 
-  return [
-    { role: "system", content: system },
-    { role: "user", content: sections.join("\n\n") },
-  ];
+  return {
+    system,
+    userText: sections.join("\n\n"),
+  };
 }
 
 export function buildRoundNPrompt(params: {
@@ -113,7 +113,7 @@ export function buildRoundNPrompt(params: {
   guidance?: Guidance[];
   blackboard?: BlackboardItem[];
   language?: DetectedLanguage;
-}): ChatMessage[] {
+}): BuiltPrompt {
   const { agent, question, round, prevPosts, context, guidance, blackboard, language } = params;
   const previousRound = prevPosts.length
     ? prevPosts.map((post, index) => `Post ${index + 1}\n${formatPost(post)}`).join("\n\n")
@@ -182,10 +182,10 @@ export function buildRoundNPrompt(params: {
   sections.push(`Round ${round} previous posts:`);
   sections.push(previousRound);
 
-  return [
-    { role: "system", content: system },
-    { role: "user", content: sections.join("\n\n") },
-  ];
+  return {
+    system,
+    userText: sections.join("\n\n"),
+  };
 }
 
 export function buildVotePrompt(params: {
@@ -194,7 +194,7 @@ export function buildVotePrompt(params: {
   allPosts: Post[][];
   blackboard?: BlackboardItem[];
   language?: DetectedLanguage;
-}): ChatMessage[] {
+}): BuiltPrompt {
   const { agent, question, allPosts, blackboard, language } = params;
 
   const history = allPosts.length
@@ -250,10 +250,8 @@ export function buildVotePrompt(params: {
   sections.push("- confidence: number between 0-1");
   sections.push("- dissent_notes: optional string");
 
-  return [
-    { role: "system", content: system },
-    { role: "user", content: sections.join("\n\n") },
-  ];
+  return {
+    system,
+    userText: sections.join("\n\n"),
+  };
 }
-
-export type { ChatMessage };

@@ -14,25 +14,21 @@ describe("prompt-builder", () => {
   };
 
   it("buildRound1Prompt includes question, persona, and required JSON fields", () => {
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question: "Should the city implement congestion pricing?",
       context: "Traffic is up 20% year-over-year.",
     });
 
-    expect(messages).toHaveLength(2);
-    expect(messages[0]?.role).toBe("system");
-    expect(messages[1]?.role).toBe("user");
+    expect(result.system).toContain(agent.persona);
+    expect(result.userText).toContain("Should the city implement congestion pricing?");
+    expect(result.userText).toContain("Traffic is up 20% year-over-year.");
 
-    expect(messages[0]?.content).toContain(agent.persona);
-    expect(messages[1]?.content).toContain("Should the city implement congestion pricing?");
-    expect(messages[1]?.content).toContain("Traffic is up 20% year-over-year.");
-
-    expect(messages[0]?.content).toContain("position");
-    expect(messages[0]?.content).toContain("reasoning");
-    expect(messages[0]?.content).toContain("confidence");
-    expect(messages[0]?.content).toContain("open_questions");
-    expect(messages[0]?.content).toContain("0-1");
+    expect(result.system).toContain("position");
+    expect(result.system).toContain("reasoning");
+    expect(result.system).toContain("confidence");
+    expect(result.system).toContain("open_questions");
+    expect(result.system).toContain("0-1");
   });
 
   it("buildRoundNPrompt includes previous posts content and round number", () => {
@@ -58,7 +54,7 @@ describe("prompt-builder", () => {
       },
     ];
 
-    const messages = buildRoundNPrompt({
+    const result = buildRoundNPrompt({
       agent,
       question: "Should the city implement congestion pricing?",
       round: 2,
@@ -66,17 +62,16 @@ describe("prompt-builder", () => {
       context: "Traffic is up 20% year-over-year.",
     });
 
-    expect(messages).toHaveLength(2);
-    expect(messages[0]?.content).toContain("Round 2");
-    expect(messages[0]?.content).toContain(agent.role);
-    expect(messages[0]?.content).toContain(agent.persona);
+    expect(result.system).toContain("Round 2");
+    expect(result.system).toContain(agent.role);
+    expect(result.system).toContain(agent.persona);
 
-    expect(messages[1]?.content).toContain("Should the city implement congestion pricing?");
-    expect(messages[1]?.content).toContain("Round 2");
-    expect(messages[1]?.content).toContain("Implement with pilot zones first.");
-    expect(messages[1]?.content).toContain("Pair policy with equity offsets.");
-    expect(messages[1]?.content).toContain("Reduces risk");
-    expect(messages[1]?.content).toContain("How will subsidy eligibility be determined?");
+    expect(result.userText).toContain("Should the city implement congestion pricing?");
+    expect(result.userText).toContain("Round 2");
+    expect(result.userText).toContain("Implement with pilot zones first.");
+    expect(result.userText).toContain("Pair policy with equity offsets.");
+    expect(result.userText).toContain("Reduces risk");
+    expect(result.userText).toContain("How will subsidy eligibility be determined?");
   });
 
   it("buildVotePrompt includes full debate history and vote JSON schema keywords", () => {
@@ -106,24 +101,23 @@ describe("prompt-builder", () => {
       ],
     ];
 
-    const messages = buildVotePrompt({
+    const result = buildVotePrompt({
       agent,
       question: "Should the city implement congestion pricing?",
       allPosts,
     });
 
-    expect(messages).toHaveLength(2);
-    expect(messages[0]?.content).toContain(agent.role);
-    expect(messages[0]?.content).toContain(agent.persona);
+    expect(result.system).toContain(agent.role);
+    expect(result.system).toContain(agent.persona);
 
-    expect(messages[1]?.content).toContain("Should the city implement congestion pricing?");
-    expect(messages[1]?.content).toContain("Implement with pilot zones first.");
-    expect(messages[1]?.content).toContain("Implement citywide with rebates.");
-    expect(messages[1]?.content).toContain("What rebate level avoids regressivity?");
+    expect(result.userText).toContain("Should the city implement congestion pricing?");
+    expect(result.userText).toContain("Implement with pilot zones first.");
+    expect(result.userText).toContain("Implement citywide with rebates.");
+    expect(result.userText).toContain("What rebate level avoids regressivity?");
 
-    expect(messages[1]?.content).toContain("chosen_position");
-    expect(messages[1]?.content).toContain("rationale");
-    expect(messages[1]?.content).toContain("confidence");
-    expect(messages[1]?.content).toContain("dissent_notes");
+    expect(result.userText).toContain("chosen_position");
+    expect(result.userText).toContain("rationale");
+    expect(result.userText).toContain("confidence");
+    expect(result.userText).toContain("dissent_notes");
   });
 });

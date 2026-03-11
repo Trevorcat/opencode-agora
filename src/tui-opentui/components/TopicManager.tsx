@@ -173,12 +173,11 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
               marginTop: 1,
               padding: 1,
               width: "80%",
+              flexDirection: "row",
             }}
           >
-            <text style={{ fg: theme.accent.yellow }}>
-              {topic}
-              <text style={{ fg: theme.accent.blue }}>█</text>
-            </text>
+            <text style={{ fg: theme.accent.yellow }}>{topic}</text>
+            <text style={{ fg: theme.accent.blue }}>█</text>
           </box>
           <text style={{ fg: theme.text.dim, marginTop: 1 }}>
             Press Enter to continue · Esc to go back · Ctrl+C to quit

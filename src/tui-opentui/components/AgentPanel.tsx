@@ -4,6 +4,7 @@ import { useKeyboard } from '@opentui/react';
 import type { BlackboardStore } from '../../blackboard/store.js';
 import type { AvailableModel } from '../../config/opencode-loader.js';
 import { theme, getAgentColor, getAgentSymbol } from '../theme.js';
+import { getRoleDisplayName } from '../../utils/role-localization.js';
 
 // ─── Mouse-aware Model Selector ───────────────────────────────────────────────
 // OpenTUI's <select> has no mouse support, so we build our own scrollable list.
@@ -16,28 +17,47 @@ type ModelSelectorProps = {
 };
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({ models, currentModel, onSelect }) => {
+  const initialIndex = Math.max(0, models.findIndex(m => m.id === currentModel));
   const [scrollOffset, setScrollOffset] = useState(() => {
     const idx = models.findIndex(m => m.id === currentModel);
     return Math.max(0, Math.min(idx, models.length - VISIBLE_ROWS));
   });
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [cursorIdx, setCursorIdx] = useState(initialIndex);
 
   const visibleModels = models.slice(scrollOffset, scrollOffset + VISIBLE_ROWS);
   const canScrollUp = scrollOffset > 0;
   const canScrollDown = scrollOffset + VISIBLE_ROWS < models.length;
 
-  const scrollUp = useCallback(() => {
-    setScrollOffset(o => Math.max(0, o - 1));
+  const moveUp = useCallback(() => {
+    setCursorIdx((prev) => {
+      const next = Math.max(0, prev - 1);
+      setScrollOffset((offset) => (next < offset ? next : offset));
+      return next;
+    });
   }, []);
 
-  const scrollDown = useCallback(() => {
-    setScrollOffset(o => Math.min(models.length - VISIBLE_ROWS, o + 1));
+  const moveDown = useCallback(() => {
+    setCursorIdx((prev) => {
+      const next = Math.min(models.length - 1, prev + 1);
+      setScrollOffset((offset) => {
+        const maxOffset = Math.max(0, models.length - VISIBLE_ROWS);
+        if (next >= offset + VISIBLE_ROWS) {
+          return Math.min(maxOffset, next - VISIBLE_ROWS + 1);
+        }
+        return offset;
+      });
+      return next;
+    });
   }, [models.length]);
 
   // Keyboard: up/down to scroll, enter to select hovered
   useKeyboard((key: { name: string }) => {
-    if (key.name === 'up') scrollUp();
-    else if (key.name === 'down') scrollDown();
+    if (key.name === 'up') moveUp();
+    else if (key.name === 'down') moveDown();
+    else if (key.name === 'return') {
+      const selected = models[cursorIdx];
+      if (selected) onSelect(selected.id);
+    }
   });
 
   return (
@@ -48,15 +68,15 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ models, currentModel, onS
       </text>
 
       {/* Visible model rows */}
-      {visibleModels.map((model, i) => {
-        const absoluteIdx = scrollOffset + i;
+      {visibleModels.map((model) => {
         const isCurrent = model.id === currentModel;
-        const isHovered = hoveredIdx === absoluteIdx;
-        const rowBg = isCurrent ? theme.accent.steelBlue : isHovered ? theme.bg.highlight : theme.bg.secondary;
+        const isCursor = model.id === models[cursorIdx]?.id;
+        const rowBg = isCurrent ? theme.accent.steelBlue : theme.bg.secondary;
         const rowFg = isCurrent ? theme.bg.primary : theme.text.primary;
-        const prefix = isCurrent ? '● ' : '  ';
+        const prefix = isCurrent ? '● ' : isCursor ? '▶ ' : '  ';
 
         return (
+          // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI uses terminal mouse events on box nodes.
           <box
             key={model.id}
             style={{
@@ -65,20 +85,16 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ models, currentModel, onS
               paddingRight: 1,
               height: 1,
             }}
-            // @ts-ignore OpenTUI mouse events
+            // @ts-ignore OpenTUI mouse event
             onMouseDown={() => onSelect(model.id)}
-            // @ts-ignore
-            onMouseOver={() => setHoveredIdx(absoluteIdx)}
-            // @ts-ignore
-            onMouseOut={() => setHoveredIdx(null)}
-            // @ts-ignore
-            onMouseScroll={(e: any) => {
-              if (e?.scroll?.direction === 'up') scrollUp();
-              else scrollDown();
+            // @ts-ignore OpenTUI keyboard event
+            onKeyDown={(e: { key?: { name?: string } }) => {
+              const name = e?.key?.name;
+              if (name === 'return' || name === 'space') onSelect(model.id);
             }}
           >
-            <text style={{ fg: rowFg }}>{prefix}{model.name}</text>
-          </box>
+             <text style={{ fg: rowFg }}>{prefix}{model.name}</text>
+           </box>
         );
       })}
 
@@ -109,6 +125,7 @@ export type AgentPanelProps = {
   onExpandChange?: (role: string | null) => void;
   /** Whether agents are in "preparing next round" state */
   isPreparingRound?: boolean;
+  language?: string;
 };
 
 const getStatusIcon = (status: AgentStatus, frame: number = 0): string => {
@@ -139,6 +156,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   expandedRole: controlledExpandedRole,
   onExpandChange,
   isPreparingRound = false,
+  language,
 }) => {
   const [frame, setFrame] = useState(0);
   const [pulseFrame, setPulseFrame] = useState(0);
@@ -190,9 +208,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     >
       <text style={{ bold: false, fg: theme.text.primary }}> AGENTS</text>
       
-      {agents.map((agent, index) => {
+      {agents.map((agent, agentIdx) => {
         const roleColor = getAgentColor(agent.role);
         const roleSymbol = getAgentSymbol(agent.role);
+        const roleLabel = getRoleDisplayName(agent.role, language).toUpperCase();
         const isPreparingThis = isPreparingRound && agent.status === 'posted';
         const statusIcon = isPreparingThis
           ? theme.status.preparingFrames[pulseFrame]
@@ -204,7 +223,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         if (isExpanded) {
           return (
             <box
-              key={index}
+              key={agentIdx.toString()}
               style={{
                 borderStyle: 'double',
                 borderColor: roleColor,
@@ -213,12 +232,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               }}
             >
               {/* Header row: click here to collapse */}
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI uses terminal mouse events on box nodes. */}
               <box
                 style={{ flexDirection: 'row' }}
                 // @ts-ignore OpenTUI mouse event
                 onMouseDown={() => setExpandedRole(null)}
+                // @ts-ignore OpenTUI keyboard event
+                onKeyDown={(e: { key?: { name?: string } }) => {
+                  const name = e?.key?.name;
+                  if (name === 'return' || name === 'space') setExpandedRole(null);
+                }}
               >
-                <text style={{ bold: true, fg: roleColor }}>{' '}{roleSymbol}{' ['}{agent.role.toUpperCase()}{'] ▼'}</text>
+                <text style={{ bold: true, fg: roleColor }}>{' '}{roleSymbol}{' ['}{roleLabel}{'] ▼'}</text>
               </box>
               <text style={{ fg: statusColor }}>{' '}{statusIcon}{' '}{statusLabel}</text>
               <text style={{ fg: theme.text.dim }}>{' Model: '}{agent.model}</text>
@@ -255,8 +280,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         }
 
         return (
+          // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI uses terminal mouse events on box nodes.
           <box 
-            key={index}
+            key={agentIdx.toString()}
             style={{ 
               borderStyle: 'single',
               borderColor: roleColor,
@@ -265,8 +291,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             }}
             // @ts-ignore OpenTUI mouse event
             onMouseDown={() => setExpandedRole(expandedRole === agent.role ? null : agent.role)}
+            // @ts-ignore OpenTUI keyboard event
+            onKeyDown={(e: { key?: { name?: string } }) => {
+              const name = e?.key?.name;
+              if (name === 'return' || name === 'space') {
+                setExpandedRole(expandedRole === agent.role ? null : agent.role);
+              }
+            }}
           >
-            <text style={{ bold: true, fg: roleColor }}>{' '}{roleSymbol}{' ['}{agent.role.toUpperCase()}{']'}</text>
+            <text style={{ bold: true, fg: roleColor }}>{' '}{roleSymbol}{' ['}{roleLabel}{']'}</text>
             <text style={{ fg: theme.text.dim }}>{' '}{agent.model}</text>
             <text style={{ fg: statusColor }}>{' '}{statusIcon}{' '}{statusLabel}</text>
             {agent.streaming_text && (

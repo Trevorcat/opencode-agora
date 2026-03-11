@@ -18,13 +18,13 @@ describe("prompt-builder language support", () => {
   // ─── buildRound1Prompt ─────────────────────────────────────────────────────
 
   it("buildRound1Prompt: Chinese language instruction injected into system prompt", () => {
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       language: "zh",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).toContain("Chinese");
     expect(system).toContain("中文");
     expect(system).toContain("MUST");
@@ -32,47 +32,47 @@ describe("prompt-builder language support", () => {
   });
 
   it("buildRound1Prompt: English language → no language instruction", () => {
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question: "Should the city implement congestion pricing?",
       language: "en",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).not.toContain("MUST respond entirely");
     expect(system).not.toContain("Keep all JSON keys in English");
   });
 
   it("buildRound1Prompt: no language param → no language instruction", () => {
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question: "Should the city implement congestion pricing?",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).not.toContain("MUST respond entirely");
   });
 
   it("buildRound1Prompt: Japanese language instruction works", () => {
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question: "これはテストです",
       language: "ja",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).toContain("Japanese");
     expect(system).toContain("日本語");
   });
 
   it("buildRound1Prompt: language instruction does not break JSON schema requirement", () => {
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       language: "zh",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     // JSON schema still present
     expect(system).toContain("position");
     expect(system).toContain("reasoning");
@@ -95,7 +95,7 @@ describe("prompt-builder language support", () => {
       },
     ];
 
-    const messages = buildRoundNPrompt({
+    const result = buildRoundNPrompt({
       agent,
       question,
       round: 2,
@@ -103,7 +103,7 @@ describe("prompt-builder language support", () => {
       language: "zh",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).toContain("Chinese");
     expect(system).toContain("中文");
     expect(system).toContain("Keep all JSON keys in English");
@@ -122,7 +122,7 @@ describe("prompt-builder language support", () => {
       },
     ];
 
-    const messages = buildRoundNPrompt({
+    const result = buildRoundNPrompt({
       agent,
       question: "Should the city implement congestion pricing?",
       round: 2,
@@ -130,7 +130,7 @@ describe("prompt-builder language support", () => {
       language: "en",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).not.toContain("MUST respond entirely");
   });
 
@@ -151,14 +151,14 @@ describe("prompt-builder language support", () => {
       ],
     ];
 
-    const messages = buildVotePrompt({
+    const result = buildVotePrompt({
       agent,
       question,
       allPosts,
       language: "ko",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).toContain("Korean");
     expect(system).toContain("한국어");
     expect(system).toContain("Keep all JSON keys in English");
@@ -179,14 +179,14 @@ describe("prompt-builder language support", () => {
       ],
     ];
 
-    const messages = buildVotePrompt({
+    const result = buildVotePrompt({
       agent,
       question: "Should the city implement congestion pricing?",
       allPosts,
       language: "en",
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).not.toContain("MUST respond entirely");
   });
 
@@ -205,13 +205,13 @@ describe("prompt-builder language support", () => {
       ],
     ];
 
-    const messages = buildVotePrompt({
+    const result = buildVotePrompt({
       agent,
       question: "Should the city implement congestion pricing?",
       allPosts,
     });
 
-    const system = messages[0]?.content;
+    const system = result.system;
     expect(system).not.toContain("MUST respond entirely");
   });
 });

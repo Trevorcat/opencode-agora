@@ -4,6 +4,8 @@ import { useKeyboard } from "@opentui/react";
 import type { AvailableModel } from "../../config/opencode-loader.js";
 import { loadRoles, type RoleCatalog } from "../../config/presets.js";
 import { theme, getAgentColor, getAgentSymbol } from "../theme.js";
+import { detectLanguage } from "../../utils/language-detect.js";
+import { getLocalizedPersona, getRoleDisplayName } from "../../utils/role-localization.js";
 
 export type WizardAgent = {
   role: string;
@@ -58,6 +60,16 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
 
   const roleNames = Object.keys(roles);
   const defaultModel = availableModels.length > 0 ? availableModels[0].id : "lilith/deepseek-v3-2-251201";
+  const questionLanguage = detectLanguage(question);
+
+  const getDefaultPersona = (roleName: string): string => {
+    const roleEntry = roles[roleName];
+    return getLocalizedPersona(
+      roleName,
+      questionLanguage,
+      roleEntry?.persona || `You are debating as the "${roleName}" perspective.`,
+    );
+  };
 
   useKeyboard((key: { name: string; sequence?: string; ctrl?: boolean; shift?: boolean }) => {
     if (key.ctrl && key.name === "c") {
@@ -96,7 +108,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
           initial.push({
             role: roleName,
             model: roleEntry?.default_model || defaultModel,
-            persona: roleEntry?.persona || `You are debating as the "${roleName}" perspective.`,
+            persona: getDefaultPersona(roleName),
           });
         }
         setAgents(initial);
@@ -128,7 +140,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
           updated[currentAgentIdx] = {
             ...updated[currentAgentIdx],
             role: selectedRole,
-            persona: roleEntry?.persona || `You are debating as the "${selectedRole}" perspective.`,
+            persona: getDefaultPersona(selectedRole),
             model: roleEntry?.default_model || updated[currentAgentIdx].model,
           };
           setAgents(updated);
@@ -272,12 +284,11 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
               marginTop: 1,
               padding: 1,
               width: "80%",
+              flexDirection: "row",
             }}
           >
-            <text style={{ fg: theme.accent.yellow }}>
-              {question}
-              <text style={{ fg: theme.accent.blue }}>█</text>
-            </text>
+            <text style={{ fg: theme.accent.yellow }}>{question}</text>
+            <text style={{ fg: theme.accent.blue }}>█</text>
           </box>
           <text style={{ fg: theme.text.dim, marginTop: 1 }}>
             Enter to continue · Esc to cancel
@@ -295,13 +306,13 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
             <text style={{ fg: theme.text.dim }}>2 </text>
             {Array.from({ length: 7 }, (_, i) => i + 2).map(n => (
               <text
-                key={n}
+                key={n.toString()}
                 style={{
                   fg: n === agentCount ? theme.accent.blue : n < agentCount ? theme.accent.green : theme.text.dim,
                   bold: n === agentCount,
                 }}
               >
-                {n === agentCount ? `[${n}]` : " · "}
+                {n === agentCount ? `[${n.toString()}]` : " · "}
               </text>
             ))}
             <text style={{ fg: theme.text.dim }}> 8</text>
@@ -321,8 +332,8 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
 
           {/* Show already-configured agents */}
           {agents.slice(0, currentAgentIdx).map((a, i) => (
-            <text key={i} style={{ fg: theme.text.dim }}>
-              {getAgentSymbol(a.role)} Agent {i + 1}: {a.role} → {a.model}
+            <text key={i.toString()} style={{ fg: theme.text.dim }}>
+              {getAgentSymbol(a.role)} Agent {(i + 1).toString()}: {getRoleDisplayName(a.role, questionLanguage)} → {a.model}
             </text>
           ))}
 
@@ -339,7 +350,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
                     }}
                   >
                     {i === roleSelectIdx ? "▶ " : "  "}
-                    {getAgentSymbol(name)} {name}
+                    {getAgentSymbol(name)} {getRoleDisplayName(name, questionLanguage)}
                   </text>
                 ))}
               </box>
@@ -349,7 +360,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
           {configSubstep === "model" && (
             <box style={{ flexDirection: "column", marginTop: 1 }}>
               <text style={{ fg: theme.accent.yellow, marginBottom: 1 }}>
-                Choose model for {getAgentSymbol(agents[currentAgentIdx]?.role)} {agents[currentAgentIdx]?.role}:
+                Choose model for {getAgentSymbol(agents[currentAgentIdx]?.role)} {getRoleDisplayName(agents[currentAgentIdx]?.role, questionLanguage)}:
               </text>
               <box style={{ flexDirection: "column" }}>
                 {availableModels.map((m, i) => (
@@ -379,7 +390,7 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
         <box style={{ flexDirection: "column" }}>
           <text style={{ fg: theme.text.primary, marginBottom: 1 }}>
             Edit persona for {getAgentSymbol(agents[editingAgentIdx]?.role)}{" "}
-            {agents[editingAgentIdx]?.role} ({(editingAgentIdx + 1).toString()}/{agentCount.toString()})
+            {getRoleDisplayName(agents[editingAgentIdx]?.role, questionLanguage)} ({(editingAgentIdx + 1).toString()}/{agentCount.toString()})
           </text>
           <text style={{ fg: theme.text.dim }}>
             Model: {agents[editingAgentIdx]?.model}
@@ -392,12 +403,11 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
               padding: 1,
               width: "90%",
               height: 6,
+              flexDirection: "row",
             }}
           >
-            <text style={{ fg: theme.text.primary }}>
-              {editingPersona.substring(editingPersona.length - 300)}
-              <text style={{ fg: theme.accent.blue }}>█</text>
-            </text>
+            <text style={{ fg: theme.text.primary }}>{editingPersona.substring(editingPersona.length - 300)}</text>
+            <text style={{ fg: theme.accent.blue }}>█</text>
           </box>
           <text style={{ fg: theme.text.dim, marginTop: 1 }}>
             Enter to save & next · Tab to skip (keep default) · Esc to go back
@@ -416,9 +426,9 @@ export const TopicWizard: React.FC<TopicWizardProps> = ({
             Agents ({agentCount.toString()}):
           </text>
           {agents.map((a, i) => (
-            <box key={i} style={{ flexDirection: "column", marginBottom: 1 }}>
+            <box key={i.toString()} style={{ flexDirection: "column", marginBottom: 1 }}>
               <text style={{ fg: getAgentColor(a.role), bold: true }}>
-                {getAgentSymbol(a.role)} {a.role}
+                {getAgentSymbol(a.role)} {getRoleDisplayName(a.role, questionLanguage)}
               </text>
               <text style={{ fg: theme.text.dim }}>  Model: {a.model}</text>
               <text style={{ fg: theme.text.muted }}>

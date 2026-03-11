@@ -27,13 +27,13 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       guidance,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("Focus on equity impacts for low-income residents.");
   });
 
@@ -59,13 +59,13 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       guidance,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("Focus on equity impacts.");
     expect(userContent).toContain("Consider revenue use for transit subsidies.");
     expect(userContent).toContain("Compare to London and Singapore models.");
@@ -81,26 +81,26 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       guidance,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("Human Guidance");
   });
 
   it("buildRound1Prompt: empty guidance array → no guidance section", () => {
     const guidance: Guidance[] = [];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       guidance,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).not.toContain("Human Guidance");
   });
 
@@ -120,13 +120,13 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("All agree: policy must include equity safeguards.");
   });
 
@@ -154,13 +154,13 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("This is a pinned item.");
     expect(userContent).not.toContain("This is NOT pinned and should not appear.");
   });
@@ -199,13 +199,13 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("[consensus]");
     expect(userContent).toContain("[note]");
     expect(userContent).toContain("[checkpoint]");
@@ -214,13 +214,13 @@ describe("prompt-builder guidance and blackboard", () => {
   it("buildRound1Prompt: empty blackboard → no blackboard section", () => {
     const blackboard: BlackboardItem[] = [];
 
-    const messages = buildRound1Prompt({
+    const result = buildRound1Prompt({
       agent,
       question,
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).not.toContain("Shared Blackboard");
   });
 
@@ -261,7 +261,7 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRoundNPrompt({
+    const result = buildRoundNPrompt({
       agent,
       question,
       round: 2,
@@ -270,7 +270,7 @@ describe("prompt-builder guidance and blackboard", () => {
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("Human Guidance");
     expect(userContent).toContain("Consider revenue recycling options.");
     expect(userContent).toContain("Shared Blackboard");
@@ -299,7 +299,7 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRoundNPrompt({
+    const result = buildRoundNPrompt({
       agent,
       question,
       round: 2,
@@ -307,7 +307,7 @@ describe("prompt-builder guidance and blackboard", () => {
       guidance,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("Human Guidance");
     expect(userContent).toContain("Focus on revenue use.");
     expect(userContent).toContain("Implement with pilot zones.");
@@ -337,7 +337,7 @@ describe("prompt-builder guidance and blackboard", () => {
       },
     ];
 
-    const messages = buildRoundNPrompt({
+    const result = buildRoundNPrompt({
       agent,
       question,
       round: 2,
@@ -345,7 +345,7 @@ describe("prompt-builder guidance and blackboard", () => {
       guidance,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     const guidanceIndex = userContent.indexOf("Human Guidance");
     const previousPostsIndex = userContent.indexOf("Round 2 previous posts");
     expect(guidanceIndex).toBeLessThan(previousPostsIndex);
@@ -381,14 +381,14 @@ describe("prompt-builder guidance and blackboard", () => {
       ],
     ];
 
-    const messages = buildVotePrompt({
+    const result = buildVotePrompt({
       agent,
       question,
       allPosts,
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("established consensus");
     expect(userContent).toContain("Equity safeguards required in any policy.");
   });
@@ -431,14 +431,14 @@ describe("prompt-builder guidance and blackboard", () => {
       ],
     ];
 
-    const messages = buildVotePrompt({
+    const result = buildVotePrompt({
       agent,
       question,
       allPosts,
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("This IS pinned and should appear.");
     expect(userContent).not.toContain("This is NOT pinned and should NOT appear.");
   });
@@ -491,14 +491,14 @@ describe("prompt-builder guidance and blackboard", () => {
       ],
     ];
 
-    const messages = buildVotePrompt({
+    const result = buildVotePrompt({
       agent,
       question,
       allPosts,
       blackboard,
     });
 
-    const userContent = messages[1]?.content;
+    const userContent = result.userText;
     expect(userContent).toContain("established consensus");
     expect(userContent).toContain("Equity safeguards required.");
     expect(userContent).toContain("Debate history");

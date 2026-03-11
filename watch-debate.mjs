@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { BlackboardStore } from './dist/blackboard/store.js';
-import { loadOpenCodeConfig, resolveProviders } from './dist/config/opencode-loader.js';
+
 
 const topicId = process.argv[2] || 'topic_20260309_e2c0b5';
 

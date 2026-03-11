@@ -4,7 +4,8 @@ import path from 'node:path';
 import { runTUI } from './App.js';
 import { BlackboardStore } from '../blackboard/store.js';
 import { DebateController } from '../moderator/controller.js';
-import { loadOpenCodeConfig, resolveProviders, listAvailableModels } from '../config/opencode-loader.js';
+import { loadOpenCodeConfig, listAvailableModels } from '../config/opencode-loader.js';
+import { OpenCodeHttpClient } from '../agents/opencode-http-client.js';
 import type { AvailableModel } from '../config/opencode-loader.js';
 import { listPresets } from '../config/presets.js';
 import type { PresetSummary } from '../config/presets.js';
@@ -24,17 +25,17 @@ async function main() {
   const agoraDir = process.env.AGORA_DIR || path.join(process.cwd(), '.agora');
   logger.info(`Starting Agora TUI for topic: ${topicId}`);
 
-  // Load provider configuration and available models
-  let providers;
+  // Discover the OpenCode HTTP server URL and load available models
+  const opencodeUrl = await OpenCodeHttpClient.discoverUrl();
+  logger.info(`OpenCode server URL: ${opencodeUrl}`);
+
   let availableModels: AvailableModel[] = [];
   try {
     const openCodeConfig = await loadOpenCodeConfig();
-    providers = resolveProviders(openCodeConfig);
     availableModels = listAvailableModels(openCodeConfig);
-    logger.info(`Loaded ${providers.size} provider(s), ${availableModels.length} model(s)`);
+    logger.info(`Loaded ${availableModels.length} model(s)`);
   } catch (error) {
-    logger.error('Failed to load OpenCode config, using empty providers:', error);
-    providers = new Map();
+    logger.error('Failed to load OpenCode config:', error);
   }
 
   // Load presets for picker mode
@@ -52,7 +53,8 @@ async function main() {
   // Initialize controller
   const controller = new DebateController({
     store,
-    providers,
+    opencodeUrl,
+    directory: agoraDir,
     retryOpts: {
       maxAttempts: 3,
       baseDelayMs: 1_000,
@@ -60,8 +62,8 @@ async function main() {
     timeoutMs: 60_000,
   });
 
-  // Run the OpenTUI app
-  await runTUI(topicId, store, controller, availableModels, presets, agoraDir, providers);
+  // Run the OpenTUI app (providers map is empty — model selection via OpenCode HTTP API)
+  await runTUI(topicId, store, controller, availableModels, presets, agoraDir);
 }
 
 main().catch((err) => {

@@ -7,14 +7,18 @@ import { BlackboardStore } from "../../src/blackboard/store.js";
 import type { AgentConfig } from "../../src/blackboard/types.js";
 import { DebateController } from "../../src/moderator/controller.js";
 
-const { mockCallAgent, mockCallVote } = vi.hoisted(() => ({
+const { mockCallAgent, mockCallVote, mockCreateSession, mockDeleteSession } = vi.hoisted(() => ({
   mockCallAgent: vi.fn(),
   mockCallVote: vi.fn(),
+  mockCreateSession: vi.fn().mockResolvedValue("mock-session-id"),
+  mockDeleteSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../src/agents/process-manager.js", () => ({
   AgentProcessManager: vi.fn().mockImplementation(function AgentProcessManagerMock() {
     return {
+      createSession: mockCreateSession,
+      deleteSession: mockDeleteSession,
       callAgent: mockCallAgent,
       callVote: mockCallVote,
     };
@@ -46,8 +50,12 @@ describe("DebateController", () => {
 
     mockCallAgent.mockReset();
     mockCallVote.mockReset();
+    mockCreateSession.mockReset();
+    mockDeleteSession.mockReset();
+    mockCreateSession.mockResolvedValue("mock-session-id");
+    mockDeleteSession.mockResolvedValue(undefined);
 
-    mockCallAgent.mockImplementation((agent: AgentConfig, _msgs: unknown, round: number) =>
+    mockCallAgent.mockImplementation((_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) =>
       Promise.resolve({
         role: agent.role,
         model: agent.model,
@@ -59,7 +67,7 @@ describe("DebateController", () => {
       }),
     );
 
-    mockCallVote.mockImplementation((agent: AgentConfig) =>
+    mockCallVote.mockImplementation((_sessionId: string, agent: AgentConfig) =>
       Promise.resolve({
         role: agent.role,
         model: agent.model,
@@ -72,9 +80,8 @@ describe("DebateController", () => {
 
     controller = new DebateController({
       store,
-      providers: new Map([
-        ["openai", { baseURL: "https://example.com/v1", apiKey: "fake-key" }],
-      ]),
+      opencodeUrl: "http://127.0.0.1:4096",
+      directory: "/tmp/agora-test",
       retryOpts: {
         maxAttempts: 1,
         baseDelayMs: 1,

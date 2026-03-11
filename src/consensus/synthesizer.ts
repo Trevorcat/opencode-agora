@@ -1,15 +1,13 @@
-import OpenAI from "openai";
+// src/consensus/synthesizer.ts
+// Synthesizes debate consensus using OpenCode HTTP API.
 
-import type {
-  Consensus,
-  Post,
-  ResolvedProvider,
-  Vote,
-} from "../blackboard/types.js";
-import { resolveModelProvider } from "../config/opencode-loader.js";
+import type { Consensus, Post, Vote } from "../blackboard/types.js";
+import { OpenCodeHttpClient } from "../agents/opencode-http-client.js";
+import { CONSENSUS_SCHEMA } from "../agents/json-schemas.js";
 
 interface SynthesizerOptions {
-  providers: Map<string, ResolvedProvider>;
+  opencodeUrl: string;
+  directory: string;
   /** Fully qualified model ID, e.g. "lilith/claude-opus-4-6" */
   moderatorModel: string;
 }
@@ -25,38 +23,37 @@ interface SynthesizeParams {
 type JsonRecord = Record<string, unknown>;
 
 export class ConsensusSynthesizer {
-  private readonly client: OpenAI;
-  private readonly modelName: string;
+  private readonly opencodeUrl: string;
+  private readonly directory: string;
+  private readonly moderatorModel: string;
 
-  constructor(private readonly options: SynthesizerOptions) {
-    const { provider, modelName } = resolveModelProvider(
-      options.moderatorModel,
-      options.providers,
-    );
-    this.modelName = modelName;
-
-    this.client = new OpenAI({
-      baseURL: provider.baseURL,
-      apiKey: provider.apiKey,
-    });
+  constructor(options: SynthesizerOptions) {
+    this.opencodeUrl = options.opencodeUrl;
+    this.directory = options.directory;
+    this.moderatorModel = options.moderatorModel;
   }
 
   async synthesize(params: SynthesizeParams): Promise<Consensus> {
+    const client = new OpenCodeHttpClient(this.opencodeUrl, this.directory);
+    const sessionId = await client.createSession();
+
     const voteDistribution = this.computeVoteDistribution(params.votes);
-    const systemPrompt = this.buildSystemPrompt();
-    const userPrompt = this.buildUserPrompt(params, voteDistribution);
+    const { providerID, modelID } = this.parseModelId(this.moderatorModel);
 
-    const response = await this.client.chat.completions.create({
-      model: this.modelName,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      response_format: { type: "json_object" },
-    });
+    let result: unknown;
+    try {
+      result = await client.sendMessage(sessionId, {
+        model: { providerID, modelID },
+        system: this.buildSystemPrompt(),
+        format: { type: "json_schema", schema: CONSENSUS_SCHEMA },
+        parts: [{ type: "text", text: this.buildUserPrompt(params, voteDistribution) }],
+      });
+    } finally {
+      // Best-effort cleanup — don't let session leaks accumulate
+      void client.deleteSession(sessionId);
+    }
 
-    const content = response.choices[0]?.message?.content;
-    const payload = this.parseJsonObject(content);
+    const payload = this.toRecord(result, "Moderator model response must be a JSON object");
 
     return {
       topic_id: params.topicId,
@@ -67,7 +64,18 @@ export class ConsensusSynthesizer {
       convergence_method: this.readString(payload, "convergence_method"),
       vote_distribution: voteDistribution,
       rounds_taken: params.roundsTaken,
-      generated_by: this.options.moderatorModel,
+      generated_by: this.moderatorModel,
+    };
+  }
+
+  private parseModelId(fullModelId: string): { providerID: string; modelID: string } {
+    const slashIdx = fullModelId.indexOf("/");
+    if (slashIdx === -1) {
+      throw new Error(`Invalid model ID "${fullModelId}": must be "provider/model" format`);
+    }
+    return {
+      providerID: fullModelId.slice(0, slashIdx),
+      modelID: fullModelId.slice(slashIdx + 1),
     };
   }
 
@@ -79,18 +87,9 @@ export class ConsensusSynthesizer {
   }
 
   private buildSystemPrompt(): string {
-    const schema = `{
-  "conclusion": "string",
-  "confidence": 0.0,
-  "key_arguments": ["string"],
-  "dissenting_views": ["string"],
-  "convergence_method": "string"
-}`;
-
     return [
-      "You are the Agora Moderator. Synthesize the debate.",
-      "Return ONLY valid JSON matching this schema:",
-      schema,
+      "You are the Agora Moderator. Synthesize the debate into a structured consensus.",
+      "Analyze votes, debate history, and key arguments to produce a comprehensive summary.",
     ].join("\n\n");
   }
 
@@ -119,7 +118,6 @@ export class ConsensusSynthesizer {
                   )
                   .join("\n")
               : "No posts recorded.";
-
             return `${header}\n${body}`;
           })
           .join("\n\n")
@@ -137,28 +135,11 @@ export class ConsensusSynthesizer {
     ].join("\n\n");
   }
 
-  private parseJsonObject(content: string | null | undefined): JsonRecord {
-    if (!content) {
-      throw new Error("Moderator model returned empty response content");
+  private toRecord(value: unknown, message: string): JsonRecord {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error(message);
     }
-
-    const stripped = content
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/, "")
-      .trim();
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(stripped);
-    } catch {
-      throw new Error("Moderator model returned invalid JSON");
-    }
-
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error("Moderator model response must be a JSON object");
-    }
-
-    return parsed as JsonRecord;
+    return value as JsonRecord;
   }
 
   private readString(source: JsonRecord, key: string): string {
@@ -182,7 +163,7 @@ export class ConsensusSynthesizer {
     if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
       throw new Error(`Missing or invalid ${key}`);
     }
-    return value;
+    return value as string[];
   }
 }
 

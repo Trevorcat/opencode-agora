@@ -111,6 +111,9 @@ export interface TopicWithBlackboard extends Topic {
 /** Real-time debate status for TUI/monitoring */
 export interface LiveStatus {
   topic_id: string;
+  question: string;
+  /** Detected language of question, e.g. zh/en */
+  language?: string;
   status: DebateStatus | "paused";
   current_round: number;
   total_rounds: number;

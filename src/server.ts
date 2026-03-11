@@ -8,7 +8,6 @@ import type {
   AgentConfig,
   DebateStatus,
   ProgressEvent,
-  ResolvedProvider,
   Topic,
 } from "./blackboard/types.js";
 import { ConsensusSynthesizer } from "./consensus/synthesizer.js";
@@ -24,7 +23,8 @@ import type { AvailableModel } from "./config/opencode-loader.js";
 interface ServerOptions {
   store: BlackboardStore;
   agoraDir: string;
-  providers: Map<string, ResolvedProvider>;
+  opencodeUrl: string;
+  directory: string;
   /** Fully qualified moderator model ID, e.g. "lilith/claude-opus-4-6" */
   moderatorModel: string;
   /** Available models from OpenCode config for list_models tool */
@@ -73,7 +73,7 @@ async function setTopicMetadata(
 }
 
 export function createAgoraServer(opts: ServerOptions): McpServer {
-  const { store, agoraDir, providers, moderatorModel, availableModels, onProgress } = opts;
+  const { store, agoraDir, opencodeUrl, directory, moderatorModel, availableModels, onProgress } = opts;
 
   // Track running async debates
   const runningDebates = new Map<string, RunningDebate>();
@@ -87,7 +87,8 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
   function createController(): DebateController {
     return new DebateController({
       store,
-      providers,
+      opencodeUrl,
+      directory,
       retryOpts: {
         maxAttempts: 3,
         baseDelayMs: 1_000,
@@ -158,7 +159,8 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
         const allPosts = await Promise.all([1, 2, 3].map((round) => store.getRoundPosts(topicId, round)));
 
         const synthesizer = new ConsensusSynthesizer({
-          providers,
+          opencodeUrl,
+          directory,
           moderatorModel,
         });
 
@@ -280,28 +282,56 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
             const allPosts = await Promise.all([1, 2, 3].map((round) => store.getRoundPosts(topicId, round)));
 
             const synthesizer = new ConsensusSynthesizer({
-              providers,
+              opencodeUrl,
+              directory,
               moderatorModel,
             });
 
-            const consensus = await synthesizer.synthesize({
-              topicId,
-              question,
-              votes,
-              allPosts,
-              roundsTaken: 3,
-            });
+            try {
+              const consensus = await synthesizer.synthesize({
+                topicId,
+                question,
+                votes,
+                allPosts,
+                roundsTaken: 3,
+              });
 
-            await store.saveConsensus(topicId, consensus);
-            await setTopicMetadata(store, topicId, "completed", new Date().toISOString());
-            await controller.pinToBlackboard(topicId, consensus.conclusion, "consensus", {
-              metadata: { confidence: consensus.confidence },
-            });
+              await store.saveConsensus(topicId, consensus);
+              await setTopicMetadata(store, topicId, "completed", new Date().toISOString());
+              await controller.pinToBlackboard(topicId, consensus.conclusion, "consensus", {
+                metadata: { confidence: consensus.confidence },
+              });
+              console.log(`[Agora] Consensus synthesized for ${topicId}`);
+            } catch (synthesisError) {
+              // Debate itself succeeded; consensus synthesis failed.
+              // Mark completed anyway (debate data is intact) but log the synthesis error.
+              const msg = synthesisError instanceof Error ? synthesisError.message : String(synthesisError);
+              const stack = synthesisError instanceof Error ? synthesisError.stack : undefined;
+              console.error(`[Agora] Consensus synthesis failed for ${topicId}: ${msg}`);
+              if (stack) console.error(stack);
+              await setTopicMetadata(store, topicId, "completed", new Date().toISOString());
+              await store.appendEvent(topicId, {
+                type: "error",
+                topic_id: topicId,
+                message: `[consensus] ${msg}`,
+                timestamp: new Date().toISOString(),
+              }).catch(() => {});
+            }
 
             runningDebates.delete(topicId);
           })
           .catch((error) => {
-            console.error(`[Agora] Debate ${topicId} failed:`, error);
+            const msg = error instanceof Error ? error.message : String(error);
+            const stack = error instanceof Error ? error.stack : undefined;
+            console.error(`[Agora] Debate ${topicId} failed: ${msg}`);
+            if (stack) console.error(stack);
+            // Persist error to events log so it's visible in watch-debate
+            store.appendEvent(topicId, {
+              type: "error",
+              topic_id: topicId,
+              message: msg,
+              timestamp: new Date().toISOString(),
+            }).catch(() => {});
             setTopicMetadata(store, topicId, "failed");
             runningDebates.delete(topicId);
           });

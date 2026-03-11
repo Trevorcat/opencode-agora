@@ -246,4 +246,110 @@ describe("BlackboardStore getLiveStatus", () => {
 
     expect(status?.total_rounds).toBe(5);
   });
+
+  it("preserves agent error even after many subsequent stream events", async () => {
+    const topic = createTopic({ status: "running" });
+    await store.saveTopic(topic);
+
+    await store.appendEvent(topic.id, {
+      type: "debate_started",
+      topic_id: topic.id,
+      question: topic.question,
+      timestamp: "2026-03-09T10:00:00.000Z",
+    });
+    await store.appendEvent(topic.id, {
+      type: "round_started",
+      topic_id: topic.id,
+      round: 1,
+      timestamp: "2026-03-09T10:00:01.000Z",
+    });
+    await store.appendEvent(topic.id, {
+      type: "agent_error",
+      topic_id: topic.id,
+      round: 1,
+      agent: "pro",
+      error: "403 model unavailable",
+      timestamp: "2026-03-09T10:00:02.000Z",
+    });
+
+    for (let i = 0; i < 600; i++) {
+      await store.appendEvent(topic.id, {
+        type: "agent_stream",
+        topic_id: topic.id,
+        round: 1,
+        agent: "con",
+        chunk: `chunk-${i}`,
+        timestamp: `2026-03-09T10:01:${String(i % 60).padStart(2, "0")}.000Z`,
+      });
+    }
+
+    const status = await store.getLiveStatus(topic.id);
+    const proAgent = status?.agents.find((agent) => agent.role === "pro");
+
+    expect(proAgent?.status).toBe("error");
+  });
+
+  it("shows thinking when agent retries after an error", async () => {
+    const topic = createTopic({ status: "running" });
+    await store.saveTopic(topic);
+
+    await store.appendEvent(topic.id, {
+      type: "round_started",
+      topic_id: topic.id,
+      round: 1,
+      timestamp: "2026-03-09T10:10:00.000Z",
+    });
+    await store.appendEvent(topic.id, {
+      type: "agent_error",
+      topic_id: topic.id,
+      round: 1,
+      agent: "pro",
+      error: "temporary provider error",
+      timestamp: "2026-03-09T10:10:01.000Z",
+    });
+    await store.appendEvent(topic.id, {
+      type: "agent_thinking",
+      topic_id: topic.id,
+      round: 1,
+      agent: "pro",
+      model: "openai/gpt-5",
+      timestamp: "2026-03-09T10:10:02.000Z",
+    });
+
+    const status = await store.getLiveStatus(topic.id);
+    const proAgent = status?.agents.find((agent) => agent.role === "pro");
+
+    expect(proAgent?.status).toBe("thinking");
+  });
+
+  it("clears previous-round error after next round starts", async () => {
+    const topic = createTopic({ status: "running" });
+    await store.saveTopic(topic);
+
+    await store.appendEvent(topic.id, {
+      type: "round_started",
+      topic_id: topic.id,
+      round: 1,
+      timestamp: "2026-03-09T10:20:00.000Z",
+    });
+    await store.appendEvent(topic.id, {
+      type: "agent_error",
+      topic_id: topic.id,
+      round: 1,
+      agent: "pro",
+      error: "round 1 failure",
+      timestamp: "2026-03-09T10:20:01.000Z",
+    });
+    await store.appendEvent(topic.id, {
+      type: "round_started",
+      topic_id: topic.id,
+      round: 2,
+      timestamp: "2026-03-09T10:20:02.000Z",
+    });
+
+    const status = await store.getLiveStatus(topic.id);
+    const proAgent = status?.agents.find((agent) => agent.role === "pro");
+
+    expect(proAgent?.status).toBe("waiting");
+  });
 });

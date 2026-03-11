@@ -8,14 +8,18 @@ import type { AgentConfig, ProgressEvent } from "../../src/blackboard/types.js";
 import { DebateController } from "../../src/moderator/controller.js";
 
 // ─── Mock AgentProcessManager ────────────────────────────────────────────────
-const { mockCallAgent, mockCallVote } = vi.hoisted(() => ({
+const { mockCallAgent, mockCallVote, mockCreateSession, mockDeleteSession } = vi.hoisted(() => ({
   mockCallAgent: vi.fn(),
   mockCallVote: vi.fn(),
+  mockCreateSession: vi.fn().mockResolvedValue("mock-session-id"),
+  mockDeleteSession: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../src/agents/process-manager.js", () => ({
   AgentProcessManager: vi.fn().mockImplementation(function AgentProcessManagerMock() {
     return {
+      createSession: mockCreateSession,
+      deleteSession: mockDeleteSession,
       callAgent: mockCallAgent,
       callVote: mockCallVote,
     };
@@ -42,7 +46,7 @@ const agents: AgentConfig[] = [
 describe("DebateController – progress events", () => {
   let rootDir: string;
   let store: BlackboardStore;
-  let onProgress: ReturnType<typeof vi.fn>;
+  let onProgressMock: ReturnType<typeof vi.fn>;
   let controller: DebateController;
 
   beforeEach(async () => {
@@ -52,8 +56,12 @@ describe("DebateController – progress events", () => {
 
     mockCallAgent.mockReset();
     mockCallVote.mockReset();
+    mockCreateSession.mockReset();
+    mockDeleteSession.mockReset();
+    mockCreateSession.mockResolvedValue("mock-session-id");
+    mockDeleteSession.mockResolvedValue(undefined);
 
-    mockCallAgent.mockImplementation((agent: AgentConfig, _msgs: unknown, round: number) =>
+    mockCallAgent.mockImplementation((_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) =>
       Promise.resolve({
         role: agent.role,
         model: agent.model,
@@ -65,7 +73,7 @@ describe("DebateController – progress events", () => {
       }),
     );
 
-    mockCallVote.mockImplementation((agent: AgentConfig) =>
+    mockCallVote.mockImplementation((_sessionId: string, agent: AgentConfig) =>
       Promise.resolve({
         role: agent.role,
         model: agent.model,
@@ -76,16 +84,15 @@ describe("DebateController – progress events", () => {
       }),
     );
 
-    onProgress = vi.fn();
+    onProgressMock = vi.fn();
 
     controller = new DebateController({
       store,
-      providers: new Map([
-        ["openai", { baseURL: "https://example.com/v1", apiKey: "fake-key" }],
-      ]),
+      opencodeUrl: "http://127.0.0.1:4096",
+      directory: "/tmp/agora-test",
       retryOpts: { maxAttempts: 1, baseDelayMs: 1 },
       timeoutMs: 500,
-      onProgress,
+      onProgress: onProgressMock as unknown as (event: ProgressEvent) => void,
     });
   });
 
@@ -95,11 +102,13 @@ describe("DebateController – progress events", () => {
 
   // ─── Helper to extract events by type ────────────────────────────────────────
   function events(type: ProgressEvent["type"]): ProgressEvent[] {
-    return onProgress.mock.calls.map((call) => call[0] as ProgressEvent).filter((e) => e.type === type);
+    return onProgressMock.mock.calls
+      .map((call) => call[0] as ProgressEvent)
+      .filter((e) => e.type === type);
   }
 
   function allEvents(): ProgressEvent[] {
-    return onProgress.mock.calls.map((call) => call[0] as ProgressEvent);
+    return onProgressMock.mock.calls.map((call) => call[0] as ProgressEvent);
   }
 
   // ─── Test 1: "debate_started" emitted first with question ────────────────────
@@ -284,11 +293,13 @@ describe("DebateController – progress events", () => {
     // voting_started must come after all round_complete events
     const allEvts = allEvents();
     const votingStartedIdx = allEvts.findIndex((evt) => evt.type === "voting_started");
-    const round3CompleteIdx = allEvts.findLastIndex((evt) => {
+    const round3CompleteIdx = [...allEvts].reverse().findIndex((evt) => {
       if (evt.type === "round_complete") return evt.round === 3;
       return false;
     });
-    expect(votingStartedIdx).toBeGreaterThan(round3CompleteIdx);
+    const normalizedRound3CompleteIdx =
+      round3CompleteIdx === -1 ? -1 : allEvts.length - 1 - round3CompleteIdx;
+    expect(votingStartedIdx).toBeGreaterThan(normalizedRound3CompleteIdx);
   });
 
   // ─── Test 7: "vote_cast" emitted per agent vote ──────────────────────────────
@@ -347,7 +358,7 @@ describe("DebateController – progress events", () => {
   it('emits "agent_error" when an agent throws, with error message', async () => {
     // Only one agent fails, the other succeeds → debate still completes
     // economist fails in round 1; ethicist succeeds in all rounds
-    mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
+    mockCallAgent.mockImplementation(async (_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) => {
       // economist always fails in round 1
       if (round === 1 && agent.role === "economist") {
         throw new Error("economist-network-error");

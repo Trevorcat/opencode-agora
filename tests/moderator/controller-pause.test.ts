@@ -4,17 +4,24 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { BlackboardStore } from "../../src/blackboard/store.js";
-import type { AgentConfig } from "../../src/blackboard/types.js";
+import type { AgentConfig, ProgressEvent } from "../../src/blackboard/types.js";
 import { DebateController } from "../../src/moderator/controller.js";
 
 // ─── Mock AgentProcessManager ────────────────────────────────────────────────
-const { mockCallAgent } = vi.hoisted(() => ({ mockCallAgent: vi.fn() }));
+const { mockCallAgent, mockCallVote, mockCreateSession, mockDeleteSession } = vi.hoisted(() => ({
+  mockCallAgent: vi.fn(),
+  mockCallVote: vi.fn(),
+  mockCreateSession: vi.fn().mockResolvedValue("mock-session-id"),
+  mockDeleteSession: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("../../src/agents/process-manager.js", () => ({
   AgentProcessManager: vi.fn().mockImplementation(function AgentProcessManagerMock() {
     return {
+      createSession: mockCreateSession,
+      deleteSession: mockDeleteSession,
       callAgent: mockCallAgent,
-      callVote: vi.fn(),
+      callVote: mockCallVote,
     };
   }),
 }));
@@ -40,7 +47,7 @@ async function readPauseState(
 describe("DebateController – pause/resume", () => {
   let rootDir: string;
   let store: BlackboardStore;
-  let onProgress: ReturnType<typeof vi.fn>;
+  let onProgressMock: ReturnType<typeof vi.fn>;
   let controller: DebateController;
 
   const agents: AgentConfig[] = [
@@ -62,8 +69,23 @@ describe("DebateController – pause/resume", () => {
     await store.init();
 
     mockCallAgent.mockReset();
+    mockCallVote.mockReset();
+    mockCreateSession.mockReset();
+    mockDeleteSession.mockReset();
+    mockCreateSession.mockResolvedValue("mock-session-id");
+    mockDeleteSession.mockResolvedValue(undefined);
+    mockCallVote.mockImplementation((_sessionId: string, agent: AgentConfig) =>
+      Promise.resolve({
+        role: agent.role,
+        model: agent.model,
+        timestamp: new Date().toISOString(),
+        chosen_position: "best position",
+        rationale: "reasoning",
+        confidence: 0.8,
+      }),
+    );
 
-    mockCallAgent.mockImplementation((agent: AgentConfig, _msgs: unknown, round: number) =>
+    mockCallAgent.mockImplementation((_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) =>
       Promise.resolve({
         role: agent.role,
         model: agent.model,
@@ -75,16 +97,15 @@ describe("DebateController – pause/resume", () => {
       }),
     );
 
-    onProgress = vi.fn();
+    onProgressMock = vi.fn();
 
     controller = new DebateController({
       store,
-      providers: new Map([
-        ["openai", { baseURL: "https://example.com/v1", apiKey: "fake-key" }],
-      ]),
+      opencodeUrl: "http://127.0.0.1:4096",
+      directory: "/tmp/agora-test",
       retryOpts: { maxAttempts: 1, baseDelayMs: 1 },
       timeoutMs: 500,
-      onProgress,
+      onProgress: onProgressMock as unknown as (event: ProgressEvent) => void,
     });
   });
 
@@ -137,7 +158,7 @@ describe("DebateController – pause/resume", () => {
 
     await controller.pauseDebate("topic-pause-3", "review before round 2");
 
-    const pausedEvent = onProgress.mock.calls
+    const pausedEvent = onProgressMock.mock.calls
       .map((call) => call[0])
       .find((e) => e.type === "paused");
 
@@ -178,10 +199,10 @@ describe("DebateController – pause/resume", () => {
     });
 
     await controller.pauseDebate("topic-resume-2");
-    onProgress.mockClear();
+    onProgressMock.mockClear();
     await controller.resumeDebate("topic-resume-2");
 
-    const resumedEvent = onProgress.mock.calls
+    const resumedEvent = onProgressMock.mock.calls
       .map((call) => call[0])
       .find((e) => e.type === "resumed");
 
@@ -200,7 +221,7 @@ describe("DebateController – pause/resume", () => {
     let round1AgentsDone = 0;
     let pauseSetAt = 0;
 
-    mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
+    mockCallAgent.mockImplementation(async (_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) => {
       if (round === 1) {
         round1AgentsDone++;
         if (round1AgentsDone === agents.length) {
@@ -253,7 +274,7 @@ describe("DebateController – pause/resume", () => {
 
     // Pause will be set after round 1 completes via side-effect in mock
     let callCount = 0;
-    mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
+    mockCallAgent.mockImplementation(async (_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) => {
       callCount++;
       if (callCount === agents.length) {
         // Pause before round 2
@@ -286,7 +307,7 @@ describe("DebateController – pause/resume", () => {
     expect(topic?.status).toBe("completed");
 
     // resumed event was emitted
-    const resumedEvent = onProgress.mock.calls
+    const resumedEvent = onProgressMock.mock.calls
       .map((c) => c[0])
       .find((e) => e.type === "resumed");
     expect(resumedEvent).toBeDefined();
@@ -301,7 +322,7 @@ describe("DebateController – pause/resume", () => {
     let pauseResolve!: () => void;
     const pauseSetPromise = new Promise<void>((resolve) => { pauseResolve = resolve; });
 
-    mockCallAgent.mockImplementation(async (agent: AgentConfig, _msgs: unknown, round: number) => {
+    mockCallAgent.mockImplementation(async (_sessionId: string, agent: AgentConfig, _prompt: unknown, round: number) => {
       if (round === 1) {
         round1AgentsDone++;
         if (round1AgentsDone === agents.length) {

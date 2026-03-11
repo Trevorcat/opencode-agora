@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import type { LiveStatus } from "../../blackboard/types.js";
 import { theme, getAgentColor, getAgentSymbol } from "../theme.js";
+import { getRoleDisplayName } from "../../utils/role-localization.js";
 
 export type SubagentCardProps = {
   topicId: string;
@@ -21,15 +22,16 @@ export const SubagentCard: React.FC<SubagentCardProps> = ({
   onDismiss,
 }) => {
   const [frame, setFrame] = useState(0);
+  const liveStatusState = liveStatus?.status;
 
   // Spinner animation
   useEffect(() => {
-    if (!liveStatus || liveStatus.status === "completed" || liveStatus.status === "failed") return;
+    if (!liveStatusState || liveStatusState === "completed" || liveStatusState === "failed") return;
     const interval = setInterval(() => {
       setFrame(f => (f + 1) % 10);
     }, 80);
     return () => clearInterval(interval);
-  }, [liveStatus?.status]);
+  }, [liveStatusState]);
 
   if (!liveStatus) {
     return (
@@ -48,8 +50,6 @@ export const SubagentCard: React.FC<SubagentCardProps> = ({
           padding: 1,
           flexDirection: "column",
         }}
-        // @ts-ignore OpenTUI mouse event
-        onMouseDown={() => onExpand?.()}
       >
         <text style={{ fg: theme.accent.blue }}>
           {theme.status.thinkingFrames[frame]} Loading {topicId}...
@@ -70,9 +70,10 @@ export const SubagentCard: React.FC<SubagentCardProps> = ({
     : liveStatus.status === "paused" ? "⏸"
     : theme.status.thinkingFrames[frame];
 
-  const truncatedQuestion = liveStatus.topic_id.length > 30
-    ? liveStatus.topic_id.substring(0, 27) + "..."
-    : liveStatus.topic_id;
+  const safeQuestion = liveStatus.question || liveStatus.topic_id;
+  const truncatedQuestion = safeQuestion.length > 30
+    ? safeQuestion.substring(0, 27) + "..."
+    : safeQuestion;
 
   // Count agent statuses
   const thinking = liveStatus.agents.filter(a => a.status === "thinking").length;
@@ -98,8 +99,6 @@ export const SubagentCard: React.FC<SubagentCardProps> = ({
         flexDirection: "column",
         padding: 1,
       }}
-      // @ts-ignore OpenTUI mouse event
-      onMouseDown={() => onExpand?.()}
     >
       {/* Header */}
       <box style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -113,9 +112,9 @@ export const SubagentCard: React.FC<SubagentCardProps> = ({
       {/* Progress bar */}
       <box style={{ flexDirection: "row", marginTop: 1 }}>
         <text style={{ fg: theme.text.dim }}>R{liveStatus.current_round}/{liveStatus.total_rounds} </text>
-        {liveStatus.agents.map((agent, i) => (
+        {liveStatus.agents.map((agent) => (
           <text
-            key={agent.role + i}
+            key={agent.role}
             style={{
               fg: agent.status === "posted" ? theme.accent.green
                 : agent.status === "thinking" ? theme.accent.yellow
@@ -126,7 +125,7 @@ export const SubagentCard: React.FC<SubagentCardProps> = ({
             {getAgentSymbol(agent.role)}
           </text>
         ))}
-        <text style={{ fg: theme.text.dim }}> {posted}/{total}</text>
+        <text style={{ fg: theme.text.dim }}> {posted.toString()}/{total.toString()}</text>
       </box>
 
       {/* Latest event */}
@@ -136,9 +135,19 @@ export const SubagentCard: React.FC<SubagentCardProps> = ({
         </text>
       )}
 
+      {thinking > 0 && (
+        <text style={{ fg: theme.text.dim }}>
+          {liveStatus.agents
+            .filter((a) => a.status === "thinking")
+            .slice(0, 1)
+            .map((a) => getRoleDisplayName(a.role, liveStatus.language))
+            .join("")} {liveStatus.language === "zh" ? "正在思考..." : "is thinking..."}
+        </text>
+      )}
+
       {/* Hint */}
       <text style={{ fg: theme.text.dim, marginTop: 1 }}>
-        Click or [F2] to expand
+        {onExpand ? "[F2] to expand" : "Running in background"}
       </text>
     </box>
   );
