@@ -12,11 +12,21 @@ import type { OpenCodeConfig } from "../blackboard/types.js";
  *   1. OPENCODE_CONFIG env var
  *   2. ~/.config/opencode/opencode.json
  */
-function getOpenCodeConfigPath(): string {
+export function getOpenCodeConfigPath(): string {
   if (process.env.OPENCODE_CONFIG) {
     return process.env.OPENCODE_CONFIG;
   }
   return path.join(os.homedir(), ".config", "opencode", "opencode.json");
+}
+
+/**
+ * Return the directory containing opencode.json.
+ * This is the correct value to pass as x-opencode-directory when calling the
+ * OpenCode HTTP API — it determines which config (and thus which API keys) the
+ * server uses for that request.
+ */
+export function getOpenCodeConfigDir(): string {
+  return path.dirname(getOpenCodeConfigPath());
 }
 
 /**

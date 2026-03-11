@@ -2,7 +2,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import path from "node:path";
 import { createAgoraServer } from "./server.js";
 import { BlackboardStore } from "./blackboard/store.js";
-import { loadOpenCodeConfig, listAvailableModels } from "./config/opencode-loader.js";
+import { loadOpenCodeConfig, listAvailableModels, getOpenCodeConfigDir } from "./config/opencode-loader.js";
 import { OpenCodeHttpClient } from "./agents/opencode-http-client.js";
 import { logger } from "./utils/logger.js";
 
@@ -11,7 +11,11 @@ const DEFAULT_MODERATOR_MODEL = "local/Qwen/Qwen3.5-27B-FP8";
 
 async function main() {
   const agoraDir = process.env.AGORA_DIR ?? path.join(process.cwd(), ".agora");
-  const directory = process.cwd();
+  // x-opencode-directory must point to the directory containing opencode.json
+  // so that the HTTP API resolves the correct provider API keys.
+  // Using process.cwd() (the project dir) causes 401 errors for remote providers
+  // because the project dir has no opencode.json with real API keys.
+  const directory = getOpenCodeConfigDir();
 
   logger.info(`Starting Agora MCP server, data dir: ${agoraDir}`);
 
