@@ -187,6 +187,10 @@ describe("MCP server tools", () => {
       availableModels: [
         { id: "lilith/deepseek-v3-2-251201", name: "DeepSeek V3.2", provider: "lilith" },
         { id: "lilith/gemini-3-flash-preview", name: "Gemini 3 Flash", provider: "lilith" },
+        { id: "lilith/claude-opus-4-6", name: "Claude Opus 4.6", provider: "lilith" },
+        { id: "lilith/gemini-3.1-pro-preview", name: "Gemini 3.1 Pro", provider: "lilith" },
+        { id: "lilith/qwen3.5-plus", name: "Qwen 3.5 Plus", provider: "lilith" },
+        { id: "codex/gpt-5.3-codex", name: "GPT-5.3 Codex", provider: "codex" },
       ],
     });
   });

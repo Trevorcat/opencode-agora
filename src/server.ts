@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 import { getDefaultAgents, loadAgentConfig } from "./agents/default-personas.js";
@@ -23,12 +25,14 @@ import type { AvailableModel } from "./config/opencode-loader.js";
 interface ServerOptions {
   store: BlackboardStore;
   agoraDir: string;
-  opencodeUrl: string;
-  directory: string;
+  opencodeUrl?: string;
+  directory?: string;
   /** Fully qualified moderator model ID, e.g. "lilith/claude-opus-4-6" */
   moderatorModel: string;
   /** Available models from OpenCode config for list_models tool */
   availableModels: AvailableModel[];
+  /** Optional providers map (unused, reserved for future use) */
+  providers?: Map<string, unknown>;
   /** Optional callback for progress notifications */
   onProgress?: (event: ProgressEvent) => void | Promise<void>;
 }
@@ -114,7 +118,7 @@ async function setTopicMetadata(
 }
 
 export function createAgoraServer(opts: ServerOptions): McpServer {
-  const { store, agoraDir, opencodeUrl, directory, moderatorModel, availableModels, onProgress } = opts;
+  const { store, agoraDir, opencodeUrl = "", directory = ".", moderatorModel, availableModels, onProgress } = opts;
 
   // Track running async debates
   const runningDebates = new Map<string, RunningDebate>();
@@ -147,6 +151,78 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
       },
     });
   }
+
+  // ─── forum.start_debate (synchronous) ────────────────────────────────────────
+  server.tool(
+    "forum.start_debate",
+    "Start a 3-round debate synchronously (waits for completion, returns consensus)",
+    {
+      question: z.string().min(1),
+      context: z.string().optional(),
+      preset: z.string().optional(),
+      agents: z
+        .array(
+          z.object({
+            role: z.string().min(1),
+            persona: z.string().optional(),
+            model: z.string().optional(),
+          }),
+        )
+        .optional(),
+      agent_count: z.number().int().min(2).max(8).optional(),
+    },
+    async ({ question, context, preset, agents, agent_count }) => {
+      const topicId = generateTopicId();
+
+      try {
+        let panel: AgentConfig[];
+        if (agents && agents.length > 0) {
+          panel = await resolveAgentsWithDefaults(agoraDir, agents);
+        } else if (preset) {
+          panel = await resolvePreset(agoraDir, preset, { agentCount: agent_count });
+        } else {
+          panel = await loadAgentConfig(agoraDir);
+        }
+
+        const topic: Topic = {
+          id: topicId,
+          question,
+          ...(context ? { context } : {}),
+          status: "pending",
+          config: {
+            max_rounds: 3,
+            consensus_threshold: 0.66,
+            agents: panel,
+          },
+          created_at: new Date().toISOString(),
+        };
+
+        await store.saveTopic(topic);
+
+        const controller = createController();
+        await controller.runDebate({ topicId, question, context, agents: panel });
+
+        const votes = await store.getVotes(topicId);
+        const allPosts = await Promise.all([1, 2, 3].map((round) => store.getRoundPosts(topicId, round)));
+
+        const synthesizer = new ConsensusSynthesizer({ opencodeUrl, directory, moderatorModel });
+        const consensus = await synthesizer.synthesize({ topicId, question, votes, allPosts, roundsTaken: 3 });
+
+        await store.saveConsensus(topicId, consensus);
+        await setTopicMetadata(store, topicId, "completed", new Date().toISOString());
+        await controller.pinToBlackboard(topicId, consensus.conclusion, "consensus", {
+          metadata: { confidence: consensus.confidence },
+        });
+
+        return toToolResult({ topicId, status: "completed", consensus });
+      } catch (error) {
+        return toToolResult(
+          { topicId, status: "failed", error: error instanceof Error ? error.message : String(error) },
+          true,
+        );
+      }
+    },
+  );
 
   server.tool(
     "forum.start_debate_async",
@@ -186,6 +262,22 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
           panel = await resolvePreset(agoraDir, preset, { agentCount: agent_count });
         } else {
           panel = await loadAgentConfig(agoraDir);
+        }
+
+        // Validate all agent models are known to avoid silent hangs on unknown providers.
+        const knownModelIds = new Set(availableModels.map((m) => m.id));
+        const unknownModels = panel
+          .map((a) => a.model)
+          .filter((m) => !knownModelIds.has(m));
+        if (unknownModels.length > 0) {
+          return toToolResult(
+            {
+              topicId,
+              status: "failed",
+              error: `Unknown model(s): ${unknownModels.join(", ")}. Use forum.list_models to see available models.`,
+            },
+            true,
+          );
         }
 
         const topic: Topic = {
@@ -306,12 +398,14 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
             runningDebates.delete(topicId);
           });
 
+        // Resolve TUI script path relative to this compiled file (dist/server.js → dist/tui-opentui/index.js)
+        const tuiScript = path.join(path.dirname(fileURLToPath(import.meta.url)), "tui-opentui", "index.js");
         return toToolResult({
           topicId,
           status: "started",
           message: "Debate started asynchronously. Use forum.get_live_status to monitor.",
-          watch: `npm run tui ${topicId}`,
-          watch_hint: "Run the above command in a new terminal to watch the full debate in real-time.",
+          watch: `node "${tuiScript}" ${topicId}`,
+          watch_hint: "Run the above command in any terminal to watch the full debate in real-time. (Or: cd to the opencode-agora directory and run: npm run tui " + topicId + ")",
         });
       } catch (error) {
         return toToolResult(
@@ -344,6 +438,7 @@ export function createAgoraServer(opts: ServerOptions): McpServer {
         topic_id: status.topic_id,
         question: status.question,
         status: status.status,
+        current_round: status.current_round,
         progress: status.progress,
         agents: status.agents.map(a => ({
           role: a.role,
